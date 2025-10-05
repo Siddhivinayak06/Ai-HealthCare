@@ -74,7 +74,3 @@ The system includes pre-trained models for common diagnostics:
 - Skin lesion detection
 
 Custom models can be trained through the admin interface using uploaded datasets.
-
-## License
-
-MIT 
