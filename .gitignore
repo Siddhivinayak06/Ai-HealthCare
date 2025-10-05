@@ -1,0 +1,110 @@
+# ---------------------------
+# Node.js / Next.js ignores
+# ---------------------------
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+.next/
+dist/
+out/
+build/
+
+# Local environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs/
+*.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor directories and files
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+
+# Coverage and test
+coverage/
+*.lcov
+jest-cache/
+jest-test-results.json
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+
+# OS-generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ---------------------------
+# Project specific ignores
+# ---------------------------
+
+# Machine Learning models & datasets
+server/ml-models/*.h5
+server/ml-models/*.pkl
+server/ml-models/*.joblib
+server/ml-models/__pycache__/
+server/ml-models/checkpoints/
+server/ml-models/temp/
+
+# Uploaded files
+uploads/
+data/
+datasets/
+media/
+
+# MongoDB dump files
+dump/
+*.bson
+*.json
+
+# SSL keys / certificates
+*.pem
+*.crt
+*.key
+
+# Config backups
+config/*.local.json
+config/*.backup.json
+
+# ---------------------------
+# Production related
+# ---------------------------
+*.tar.gz
+*.zip
+*.tgz
+
+# Local runtime
+.pid
+*.pid.lock
+
+# Ignore Python cache (if ML preprocessing scripts used)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
