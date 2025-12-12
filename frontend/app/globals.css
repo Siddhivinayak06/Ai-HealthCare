@@ -1,0 +1,186 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --background: oklch(0.98 0.005 240);
+  --foreground: oklch(0.12 0.02 240);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.12 0.02 240);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.12 0.02 240);
+  --primary: oklch(0.55 0.2 220);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.96 0.01 240);
+  --secondary-foreground: oklch(0.2 0.02 240);
+  --muted: oklch(0.96 0.01 240);
+  --muted-foreground: oklch(0.45 0.02 240);
+  --accent: oklch(0.55 0.2 220);
+  --accent-foreground: oklch(0.99 0 0);
+  --destructive: oklch(0.55 0.25 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.6 0.2 155);
+  --success-foreground: oklch(0.99 0 0);
+  --warning: oklch(0.75 0.18 70);
+  --warning-foreground: oklch(0.12 0.02 70);
+  --border: oklch(0.92 0.01 240);
+  --input: oklch(0.94 0.01 240);
+  --ring: oklch(0.55 0.2 220);
+  --chart-1: oklch(0.55 0.2 220);
+  --chart-2: oklch(0.6 0.2 155);
+  --chart-3: oklch(0.75 0.18 70);
+  --chart-4: oklch(0.55 0.25 25);
+  --chart-5: oklch(0.58 0.18 280);
+  --radius: 1rem;
+  --sidebar: oklch(0.98 0.005 240);
+  --sidebar-foreground: oklch(0.12 0.02 240);
+  --sidebar-primary: oklch(0.55 0.2 220);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.95 0.015 220);
+  --sidebar-accent-foreground: oklch(0.2 0.02 240);
+  --sidebar-border: oklch(0.92 0.01 240);
+  --sidebar-ring: oklch(0.55 0.2 220);
+}
+
+.dark {
+  /* Deep dark theme with vibrant accents for Bento grid */
+  --background: oklch(0.08 0.02 250);
+  --foreground: oklch(0.95 0.01 240);
+  --card: oklch(0.12 0.025 250);
+  --card-foreground: oklch(0.95 0.01 240);
+  --popover: oklch(0.12 0.025 250);
+  --popover-foreground: oklch(0.95 0.01 240);
+  --primary: oklch(0.65 0.22 200);
+  --primary-foreground: oklch(0.08 0.02 250);
+  --secondary: oklch(0.16 0.025 250);
+  --secondary-foreground: oklch(0.95 0.01 240);
+  --muted: oklch(0.18 0.025 250);
+  --muted-foreground: oklch(0.58 0.02 240);
+  --accent: oklch(0.22 0.04 200);
+  --accent-foreground: oklch(0.95 0.01 240);
+  --destructive: oklch(0.55 0.28 25);
+  --destructive-foreground: oklch(0.95 0.01 240);
+  --success: oklch(0.6 0.22 155);
+  --success-foreground: oklch(0.08 0.02 250);
+  --warning: oklch(0.72 0.2 70);
+  --warning-foreground: oklch(0.08 0.02 250);
+  --border: oklch(0.2 0.03 250);
+  --input: oklch(0.16 0.025 250);
+  --ring: oklch(0.65 0.22 200);
+  --chart-1: oklch(0.65 0.22 200);
+  --chart-2: oklch(0.6 0.22 155);
+  --chart-3: oklch(0.72 0.2 70);
+  --chart-4: oklch(0.55 0.28 25);
+  --chart-5: oklch(0.62 0.2 280);
+  --sidebar: oklch(0.1 0.025 250);
+  --sidebar-foreground: oklch(0.95 0.01 240);
+  --sidebar-primary: oklch(0.65 0.22 200);
+  --sidebar-primary-foreground: oklch(0.08 0.02 250);
+  --sidebar-accent: oklch(0.16 0.03 200);
+  --sidebar-accent-foreground: oklch(0.95 0.01 240);
+  --sidebar-border: oklch(0.18 0.03 250);
+  --sidebar-ring: oklch(0.65 0.22 200);
+}
+
+@theme inline {
+  --font-sans: "Geist", "Geist Fallback";
+  --font-mono: "Geist Mono", "Geist Mono Fallback";
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Add custom Bento grid styling */
+@layer utilities {
+  .bento-card {
+    @apply relative overflow-hidden rounded-2xl border border-border/50 bg-card transition-all duration-300;
+    background: linear-gradient(135deg, var(--card) 0%, oklch(from var(--card) l c h / 0.8) 100%);
+  }
+
+  .bento-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, oklch(from var(--primary) l c h / 0.15) 0%, transparent 50%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .bento-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 20px 40px -12px oklch(from var(--primary) l c h / 0.15);
+    border-color: oklch(from var(--primary) l c h / 0.3);
+  }
+
+  .glow-sm {
+    box-shadow: 0 0 20px -5px oklch(from var(--primary) l c h / 0.3);
+  }
+
+  .glow-md {
+    box-shadow: 0 0 40px -10px oklch(from var(--primary) l c h / 0.4);
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, var(--foreground) 0%, var(--muted-foreground) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .bg-grid-pattern {
+    background-image: linear-gradient(to right, oklch(from var(--border) l c h / 0.3) 1px, transparent 1px),
+      linear-gradient(to bottom, oklch(from var(--border) l c h / 0.3) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+}
