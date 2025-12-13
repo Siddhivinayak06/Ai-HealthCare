@@ -4,9 +4,20 @@ import { PredictionTimeline } from "@/components/prediction-timeline"
 import { ModelAccuracy } from "@/components/model-accuracy"
 import { PatientPredictionsList } from "@/components/patient-predictions-list"
 import { RiskDistribution } from "@/components/risk-distribution"
+import { RiskSimulator } from "@/components/risk-simulator"
+import { ImageDiagnostics } from "@/components/image-diagnostics"
 import { BrainIcon, CheckCircleIcon, AlertCircleIcon, ActivityIcon } from "@/components/icons"
+import { getPredictionStats, getRiskDistribution, getModelAccuracy, getPatientPredictions } from "@/app/actions/dashboard"
 
-export default function PredictionsPage() {
+export default async function PredictionsPage() {
+  // Fetch all data in parallel for better performance
+  const [stats, riskDistributionData, modelAccuracyData, patientPredictionsData] = await Promise.all([
+    getPredictionStats(),
+    getRiskDistribution(),
+    getModelAccuracy(),
+    getPatientPredictions(5)
+  ])
+
   return (
     <div className="p-4 lg:p-8 pt-16 lg:pt-8 space-y-8">
       <DashboardHeader
@@ -18,46 +29,51 @@ export default function PredictionsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
         <StatCard
           title="Active Predictions"
-          value="1,847"
-          change="+142 this week"
-          changeType="positive"
+          value={stats.activePredictions.toLocaleString()}
+          change={stats.predictionsThisWeek > 0 ? `+${stats.predictionsThisWeek} this week` : "No predictions yet"}
+          changeType={stats.predictionsThisWeek > 0 ? "positive" : "neutral"}
           icon={BrainIcon}
         />
         <StatCard
           title="High Accuracy Rate"
-          value="91.2%"
-          change="+2.1% improvement"
-          changeType="positive"
+          value={`${stats.accuracyRate || 0}%`}
+          change={stats.accuracyRate > 90 ? "Excellent performance" : stats.accuracyRate > 0 ? "AI confidence" : "No data yet"}
+          changeType={stats.accuracyRate > 85 ? "positive" : "neutral"}
           icon={CheckCircleIcon}
         />
         <StatCard
           title="High Risk Patients"
-          value="127"
-          change="Requires attention"
-          changeType="negative"
+          value={stats.highRiskPatients.toString()}
+          change={stats.highRiskPatients > 0 ? "Requires attention" : "All clear"}
+          changeType={stats.highRiskPatients > 0 ? "negative" : "positive"}
           icon={AlertCircleIcon}
         />
         <StatCard
           title="Predictions Today"
-          value="284"
-          change="Processing 12 more"
-          changeType="neutral"
+          value={stats.predictionsToday.toString()}
+          change={stats.predictionsToday > 0 ? "Active processing" : "None today"}
+          changeType={stats.predictionsToday > 0 ? "positive" : "neutral"}
           icon={ActivityIcon}
         />
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <RiskSimulator />
+        <ImageDiagnostics />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-7">
-          <RiskDistribution />
+          <RiskDistribution data={riskDistributionData} />
         </div>
         <div className="lg:col-span-5">
-          <ModelAccuracy />
+          <ModelAccuracy data={modelAccuracyData} />
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-7">
-          <PatientPredictionsList />
+          <PatientPredictionsList data={patientPredictionsData} />
         </div>
         <div className="lg:col-span-5">
           <PredictionTimeline />
@@ -66,3 +82,4 @@ export default function PredictionsPage() {
     </div>
   )
 }
+

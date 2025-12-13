@@ -1,9 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/authMiddleware');
+const axios = require('axios');
 
 // Proxy to ML Service (running on port 8000)
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://127.0.0.1:8000';
+
+// Configure multer for memory storage
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
+const FormData = require('form-data');
 
 // @route   POST /api/predict/risk
 // @desc    Get risk prediction from ML model
@@ -36,4 +42,47 @@ router.post('/risk', protect, async (req, res) => {
     }
 });
 
+// @route   POST /api/predict/image
+// @desc    Get image diagnosis from ML model
+// @access  Private
+router.post('/image', protect, upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ message: 'No image file uploaded' });
+        }
+
+        // Create FormData to forward the file
+        const formData = new FormData();
+        // Append buffer with filename and contentType
+        formData.append('file', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype,
+        });
+
+        // Forward to ML Service using axios (better form-data support than fetch)
+        const response = await axios.post(`${ML_SERVICE_URL}/predict/image`, formData, {
+            headers: {
+                ...formData.getHeaders(),
+            },
+        });
+
+        res.json(response.data);
+
+    } catch (error) {
+        console.error('Error proxying image to ML service:', error.message);
+        if (error.response) {
+            console.error('ML Service Response:', error.response.data);
+            return res.status(error.response.status).json({
+                message: 'ML Service Image Analysis Failed',
+                details: JSON.stringify(error.response.data)
+            });
+        }
+        res.status(500).json({
+            message: 'Failed to connect to ML service for image analysis.',
+            error: error.message
+        });
+    }
+});
+
 module.exports = router;
+

@@ -10,27 +10,39 @@ import Link from "next/link"
 // Types
 import { HealthRecord, Patient } from "@/lib/db"
 
+// ... imports
+import { getAppointments } from "@/app/actions/appointments"
+import { getPatientPrescriptions } from "@/app/actions/prescriptions"
+import { PillIcon, PlusIcon } from "lucide-react"
+
 export function PatientDashboard({ user }: { user: any }) {
     const [loading, setLoading] = useState(true)
     const [patientProfile, setPatientProfile] = useState<Patient | null>(null)
     const [healthRecords, setHealthRecords] = useState<HealthRecord[]>([])
+    const [appointments, setAppointments] = useState<any[]>([])
+    const [prescriptions, setPrescriptions] = useState<any[]>([])
 
     useEffect(() => {
         async function fetchData() {
-            // For a patient role, getPatients returns their own list (which should contain 1 item)
-            // Or we can try to fetch their specific patient record if we knew the ID. 
-            // But acts of creating a patient profile logic for new users:
-            // If they don't have a profile, we should probably prompt them to create one.
-
             try {
-                // We use the same 'getPatients' action which now returns the user's own profile(s)
                 const { getPatients } = await import("@/app/actions/patients")
                 const patients = await getPatients()
 
                 if (patients && patients.length > 0) {
+                    console.log("Dashboard received patients:", patients)
+                    console.log("First patient ID:", patients[0].id)
                     setPatientProfile(patients[0])
-                    const records = await getPatientHealthRecords(patients[0].id)
+
+                    // Fetch all data in parallel
+                    const [records, apts, rx] = await Promise.all([
+                        getPatientHealthRecords(patients[0].id),
+                        getAppointments(),
+                        getPatientPrescriptions(patients[0].id)
+                    ])
+
                     setHealthRecords(records)
+                    setAppointments(apts)
+                    setPrescriptions(rx)
                 }
             } catch (error) {
                 console.error("Error fetching patient data", error)
@@ -42,7 +54,10 @@ export function PatientDashboard({ user }: { user: any }) {
     }, [])
 
     if (loading) {
-        return <div className="p-8 text-center text-muted-foreground">Loading your health profile...</div>
+        return <div className="p-8 text-center text-muted-foreground flex flex-col items-center gap-4">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+            Loading your health profile...
+        </div>
     }
 
     if (!patientProfile) {
@@ -58,6 +73,17 @@ export function PatientDashboard({ user }: { user: any }) {
     }
 
     const latestRecord = healthRecords[0]
+    // Get next upcoming appointment, or if none, get the most recent past one
+    const upcomingAppointments = appointments
+        .filter(a => new Date(a.start_time) > new Date())
+        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+
+    const pastAppointments = appointments
+        .filter(a => new Date(a.start_time) <= new Date())
+        .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())
+
+    const displayedAppointment = upcomingAppointments.length > 0 ? upcomingAppointments[0] : (pastAppointments.length > 0 ? pastAppointments[0] : null)
+    const isUpcoming = upcomingAppointments.length > 0
 
     return (
         <div className="space-y-6">
@@ -66,9 +92,16 @@ export function PatientDashboard({ user }: { user: any }) {
                     <h1 className="text-3xl font-bold tracking-tight">My Health Dashboard</h1>
                     <p className="text-muted-foreground">Overview of your latest vitals and reports</p>
                 </div>
-                <Link href={`/patients/${patientProfile.id}`}>
-                    <Button variant="outline">View Full Profile</Button>
-                </Link>
+                <div className="flex gap-2">
+                    <Link href="/appointments">
+                        <Button className="gap-2">
+                            <PlusIcon className="h-4 w-4" /> Book Appointment
+                        </Button>
+                    </Link>
+                    <Link href={`/patients/${patientProfile.id}`}>
+                        <Button variant="outline">View Full Profile</Button>
+                    </Link>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -98,12 +131,12 @@ export function PatientDashboard({ user }: { user: any }) {
 
                 <Card className="hover:shadow-md transition-shadow">
                     <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                        <CardTitle className="text-sm font-medium">Risk Status</CardTitle>
-                        <AlertCircleIcon className="h-4 w-4 text-warning" />
+                        <CardTitle className="text-sm font-medium">Active Prescriptions</CardTitle>
+                        <PillIcon className="h-4 w-4 text-blue-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">Low Risk</div>
-                        <p className="text-xs text-muted-foreground">Based on recent analysis</p>
+                        <div className="text-2xl font-bold">{prescriptions.filter(p => p.status === 'Active').length}</div>
+                        <p className="text-xs text-muted-foreground">Current medications</p>
                     </CardContent>
                 </Card>
 
@@ -122,34 +155,71 @@ export function PatientDashboard({ user }: { user: any }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card className="h-full">
                     <CardHeader>
-                        <CardTitle>Recent Recommendations</CardTitle>
-                        <CardDescription>AI-generated health insights</CardDescription>
+                        <CardTitle>Recent Prescriptions</CardTitle>
+                        <CardDescription>Your current medication schedule</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <ul className="space-y-4">
-                            <li className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50">
-                                <span className="text-primary mt-1">•</span>
-                                <span>Maintain current exercise routine (3x/week) to keep heart health optimal.</span>
-                            </li>
-                            <li className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50">
-                                <span className="text-primary mt-1">•</span>
-                                <span>Monitor cholesterol levels given the family history markers.</span>
-                            </li>
-                        </ul>
+                        {prescriptions.length > 0 ? (
+                            <ul className="space-y-4">
+                                {prescriptions.slice(0, 3).map((rx: any) => (
+                                    <li key={rx.id} className="flex items-start justify-between gap-3 p-3 rounded-lg bg-secondary/50">
+                                        <div>
+                                            <p className="font-medium">{rx.medication_name}</p>
+                                            <p className="text-xs text-muted-foreground">{rx.dosage} - {rx.frequency}</p>
+                                        </div>
+                                        <span className={`text-[10px] px-2 py-1 rounded-full ${rx.status === 'Active' ? 'bg-green-500/10 text-green-500' : 'bg-gray-500/10 text-gray-500'}`}>
+                                            {rx.status}
+                                        </span>
+                                    </li>
+                                ))}
+                                {prescriptions.length > 3 && (
+                                    <Link href="/prescriptions" className="block text-center text-sm text-primary hover:underline pt-2">
+                                        View all
+                                    </Link>
+                                )}
+                            </ul>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
+                                <PillIcon className="h-8 w-8 mb-2 opacity-50" />
+                                <p>No active prescriptions</p>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 
                 <Card className="h-full">
                     <CardHeader>
-                        <CardTitle>Upcoming Appointments</CardTitle>
-                        <CardDescription>Scheduled check-ups and tests</CardDescription>
+                        <CardTitle>{isUpcoming ? "Upcoming Appointment" : "Latest Appointment"}</CardTitle>
+                        <CardDescription>{isUpcoming ? "Next scheduled check-up" : "Most recent appointment details"}</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground bg-secondary/20 rounded-xl border border-dashed border-border/50">
-                            <CalendarIcon className="h-8 w-8 mb-2 opacity-50" />
-                            <p>No upcoming appointments</p>
-                            <Button variant="link" className="text-primary h-auto p-0 mt-1">Schedule Now</Button>
-                        </div>
+                        {displayedAppointment ? (
+                            <div className="flex flex-col gap-4">
+                                <div className="flex items-center gap-4 p-4 rounded-xl bg-primary/10 border border-primary/20">
+                                    <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
+                                        {new Date(displayedAppointment.start_time).getDate()}
+                                    </div>
+                                    <div>
+                                        <p className="font-semibold">{displayedAppointment.title}</p>
+                                        <p className="text-sm text-muted-foreground">
+                                            {new Date(displayedAppointment.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            {!isUpcoming && <span className="ml-2 text-xs bg-secondary px-2 py-0.5 rounded text-muted-foreground">(Past)</span>}
+                                        </p>
+                                    </div>
+                                </div>
+                                <Button variant="outline" className="w-full" asChild>
+                                    <Link href="/appointments">Manage Appointments</Link>
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center h-48 text-muted-foreground bg-secondary/20 rounded-xl border border-dashed border-border/50">
+                                <CalendarIcon className="h-8 w-8 mb-2 opacity-50" />
+                                <p>No scheduled appointments</p>
+                                <Button variant="link" className="text-primary h-auto p-0 mt-1" asChild>
+                                    <Link href="/appointments">Schedule Now</Link>
+                                </Button>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>

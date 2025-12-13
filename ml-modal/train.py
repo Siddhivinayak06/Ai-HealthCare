@@ -1,107 +1,82 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
-from torchvision import datasets, transforms, models
 import os
 import time
+import argparse
+import copy
+from src.config import DATA_DIR, DEVICE
+from src.data_loader import create_dataloaders
+from src.model_factory import create_densenet_model, save_model
 
-# Configuration
-DATA_DIR = 'data'
-MODEL_SAVE_PATH = 'medical_model.pth'
-NUM_EPOCHS = 5
-BATCH_SIZE = 32
-LEARNING_RATE = 0.001
-NUM_CLASSES = 2  # e.g., Normal vs Pneumonia
+def parse_args():
+    parser = argparse.ArgumentParser(description='Train Medical Image Analysis Models')
+    parser.add_argument('--modality', type=str, default='all', choices=['xray', 'ct', 'mri', 'all', 'modality_check'])
+    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('--batch_size', type=int, default=16)
+    parser.add_argument('--lr', type=float, default=0.001)
+    return parser.parse_args()
 
-def train_model():
-    print("Starting training pipeline...")
+def train_single_modality(modality, epochs=10, batch_size=16, lr=0.001):
+    print(f"\n{'='*40}")
+    print(f"Starting Training Pipeline: {modality.upper()}")
+    print(f"{'='*40}")
     
-    # Check if data exists
-    if not os.path.exists(DATA_DIR):
-        print(f"Error: Data directory '{DATA_DIR}' not found.")
-        print("Please create a 'data' folder with 'train' and 'val' subfolders containing your class images.")
-        return
-
-    # Device Configuration
-    if torch.backends.mps.is_available():
-        device = torch.device("mps")
-        print("Using Device: MPS (Mac GPU)")
-    elif torch.cuda.is_available():
-        device = torch.device("cuda:0")
-        print("Using Device: CUDA (NVIDIA GPU)")
-    else:
-        device = torch.device("cpu")
-        print("Using Device: CPU (Slow)")
-
-    # Reduced Batch Size for stability
-    BATCH_SIZE = 8
-
-    # Data Augmentation & Normalization
-    data_transforms = {
-        'train': transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ]),
-        'test': transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ]),
-    }
-
-    # Load Data
-    image_datasets = {x: datasets.ImageFolder(os.path.join(DATA_DIR, x), data_transforms[x])
-                      for x in ['train', 'test']}
-    dataloaders = {x: DataLoader(image_datasets[x], batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
-                   for x in ['train', 'test']}
-    dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'test']}
-    class_names = image_datasets['train'].classes
+    modality_dir = os.path.join(DATA_DIR, modality)
+    train_dir = os.path.join(modality_dir, 'train')
     
-    print(f"Classes found: {class_names}")
+    # Check for data
+    if not os.path.exists(train_dir) or not os.listdir(train_dir):
+        print(f"⚠️  No training data found in {train_dir}. Skipping.")
+        return None
 
-    # Use DenseNet121 (Standard for Medical Imaging)
-    model = models.densenet121(weights=models.DenseNet121_Weights.DEFAULT)
-    
-    # Freeze initial layers (Transfer Learning)
-    for param in model.parameters():
-        param.requires_grad = False
+    try:
+        dataloaders, image_datasets = create_dataloaders(modality_dir, batch_size)
+    except Exception as e:
+        print(f"⚠️ Error loading data for {modality}: {e}")
+        return None
         
-    # Replace classifier
-    num_ftrs = model.classifier.in_features
-    model.classifier = nn.Linear(num_ftrs, NUM_CLASSES)
+    class_names = image_datasets['train'].classes
+    num_classes = len(class_names)
     
-    model = model.to(device)
+    print(f"📊 Dataset Info ({modality}):")
+    print(f"   Classes ({num_classes}): {class_names}")
+    print(f"   Train: {len(image_datasets['train'])} | Val: {len(image_datasets['val'])}")
+
+    if num_classes < 2:
+        print("⚠️ Need at least 2 classes to train. Skipping.")
+        return None
+
+    # Model Setup
+    print("🏗️  Initializing Model...")
+    model = create_densenet_model(num_classes)
+    model = model.to(DEVICE)
     
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.classifier.parameters(), lr=LEARNING_RATE, momentum=0.9)
+    optimizer = optim.Adam(model.classifier.parameters(), lr=lr)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
 
-    # Training Loop
-    for epoch in range(NUM_EPOCHS):
-        print(f'Epoch {epoch}/{NUM_EPOCHS - 1}')
-        print('-' * 10)
+    # Training
+    since = time.time()
+    best_model_wts = copy.deepcopy(model.state_dict())
+    best_acc = 0.0
+    
+    print(f"🔄 Training {epochs} epochs on {DEVICE}...")
 
-        for phase in ['train', 'test']:
-            if phase == 'train':
-                model.train()
-            else:
-                model.eval()
+    for epoch in range(epochs):
+        for phase in ['train', 'val']:
+            if phase == 'train': model.train()
+            else: model.eval()
 
             running_loss = 0.0
             running_corrects = 0
+            
+            # Skip if empty val set
+            if len(image_datasets[phase]) == 0: continue
 
-            # Iterate over data.
-            for i, (inputs, labels) in enumerate(dataloaders[phase]):
-                if i % 10 == 0:
-                    print(f"  {phase} Batch {i}/{len(dataloaders[phase])}")
-                
-                inputs = inputs.to(device)
-                labels = labels.to(device)
-
+            for inputs, labels in dataloaders[phase]:
+                inputs = inputs.to(DEVICE)
+                labels = labels.to(DEVICE)
 
                 optimizer.zero_grad()
 
@@ -116,17 +91,37 @@ def train_model():
 
                 running_loss += loss.item() * inputs.size(0)
                 running_corrects += torch.sum(preds == labels.data)
+            
+            if phase == 'train': scheduler.step()
 
-            epoch_loss = running_loss / dataset_sizes[phase]
-            epoch_acc = running_corrects.float() / dataset_sizes[phase]
+            epoch_acc = running_corrects.float() / len(image_datasets[phase])
+            
+            if phase == 'val' and epoch_acc > best_acc:
+                best_acc = epoch_acc
+                best_model_wts = copy.deepcopy(model.state_dict())
+            elif phase == 'train' and len(image_datasets['val']) == 0:
+                 best_acc = epoch_acc
+                 best_model_wts = copy.deepcopy(model.state_dict())
 
-            print(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
-
-    print('Training complete')
+    time_elapsed = time.time() - since
+    print(f"✅ {modality.upper()} Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s")
     
-    # Save Model
-    torch.save(model.state_dict(), MODEL_SAVE_PATH)
-    print(f"Model saved to {MODEL_SAVE_PATH}")
+    model.load_state_dict(best_model_wts)
+    save_path = f'model_{modality}.pth'
+    save_model(model, save_path)
+    return save_path
+
+def train_model(args):
+    """Entry point"""
+    if args.modality == 'all':
+        saved_paths = []
+        for mod in ['xray', 'ct', 'mri']:
+            path = train_single_modality(mod, args.epochs, args.batch_size, args.lr)
+            if path: saved_paths.append(path)
+        return saved_paths
+    else:
+        return train_single_modality(args.modality, args.epochs, args.batch_size, args.lr)
 
 if __name__ == "__main__":
-    train_model()
+    args = parse_args()
+    train_model(args)

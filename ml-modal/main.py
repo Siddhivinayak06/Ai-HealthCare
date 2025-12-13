@@ -1,192 +1,267 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks
 from pydantic import BaseModel
 from PIL import Image
 import torch
-from torchvision import models, transforms
 import io
 import os
-import numpy as np
-import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-import joblib
+import shutil
+import uuid
+import time
+import argparse
+from typing import Optional, Dict
+from threading import Lock
 
-app = FastAPI()
+# Functional Modules
+import train
+from src.config import SCAN_CONDITIONS, MODEL_FILES, DATA_DIR, GENERIC_MODEL_FILENAME, DEVICE
+from src.model_factory import load_model_from_disk, get_fallback_model
+from src.image_processing import analyze_image_features, get_diagnosis_from_prediction, image_preprocess
+from src.risk import get_risk_model, predict_patient_risk
 
-# --- 1. IMAGE MODEL SETUP (DenseNet121) ---
-try:
-    image_model = models.densenet121(weights=models.DenseNet121_Weights.DEFAULT)
-    if os.path.exists('medical_model.pth'):
-        print("Loading trained medical model (Image)...")
-        num_ftrs = image_model.classifier.in_features
-        image_model.classifier = torch.nn.Linear(num_ftrs, 2)
-        image_model.load_state_dict(torch.load('medical_model.pth', map_location=torch.device('cpu')))
-        IMAGE_MODEL_TYPE = "Medical (Fine-Tuned)"
-    else:
-        print("Warning: Medical Image model not found. Using Generic ImageNet.")
-        IMAGE_MODEL_TYPE = "Generic (ImageNet)"
-    image_model.eval()
-except Exception as e:
-    print(f"Error loading image model: {e}")
+app = FastAPI(
+    title="MedAI Diagnostics API",
+    description="AI-powered medical imaging analysis with Continuous Learning",
+    version="3.0.0"
+)
 
-image_preprocess = transforms.Compose([
-    transforms.Resize(256),
-    transforms.CenterCrop(224),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-])
+# --- STATE ---
+MODELS: Dict[str, torch.nn.Module] = {}
+training_lock = Lock()
+risk_model = get_risk_model()
 
-
-# --- 2. RISK MODEL SETUP (Random Forest) ---
-RISK_MODEL_PATH = 'risk_model.joblib'
-risk_model = None
-
-def train_synthetic_risk_model():
-    print("Training synthetic risk model...")
-    # Generate fake medical data
-    np.random.seed(42)
-    n_samples = 1000
+# --- INITIALIZATION ---
+def load_all_models():
+    """Reloads all models from disk"""
+    print(f"\n--- Loading Imaging Models on {DEVICE} ---")
     
-    # Features: Age, BMI, SystolicBP, DiastolicBP, Glucose, Cholesterol, Smoker(0/1)
-    # Target: HighRisk(0/1)
-    
-    # Simple logic for synthetic ground truth:
-    # Risk increases with Age, BMI, BP, Glucose
-    
-    age = np.random.randint(20, 90, n_samples)
-    bmi = np.random.normal(25, 5, n_samples)
-    sys_bp = np.random.normal(120, 15, n_samples)
-    dia_bp = np.random.normal(80, 10, n_samples)
-    glucose = np.random.normal(100, 20, n_samples)
-    cholesterol = np.random.normal(200, 40, n_samples)
-    smoker = np.random.randint(0, 2, n_samples)
-    
-    X = pd.DataFrame({
-        'age': age,
-        'bmi': bmi,
-        'sys_bp': sys_bp,
-        'dia_bp': dia_bp,
-        'glucose': glucose,
-        'cholesterol': cholesterol,
-        'smoker': smoker
-    })
-    
-    # Define a risk score for ground truth generation
-    risk_score = (
-        (age / 90) * 2 + 
-        (bmi / 40) * 1.5 + 
-        (sys_bp / 180) * 1.5 + 
-        (glucose / 200) * 2 + 
-        (smoker * 0.5)
-    )
-    
-    # Threshold for "High Risk"
-    y = (risk_score > np.percentile(risk_score, 70)).astype(int) 
-    
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(X, y)
-    
-    joblib.dump(model, RISK_MODEL_PATH)
-    print("Synthetic risk model trained and saved.")
-    return model
+    # 1. Try to load specific models
+    for modality, filename in MODEL_FILES.items():
+        model, success = load_model_from_disk(filename)
+        if success:
+            MODELS[modality] = model
+        else:
+            # Fallback for X-Ray legacy
+            if modality == "xray" and os.path.exists(GENERIC_MODEL_FILENAME):
+                print(f"ℹ️ Using generic legacy model for {modality}")
+                MODELS["xray"], _ = load_model_from_disk(GENERIC_MODEL_FILENAME)
+            else:
+                print(f"ℹ️ Using generic backbone for {modality} (Untrained)")
+                MODELS[modality] = get_fallback_model()
 
-if os.path.exists(RISK_MODEL_PATH):
-    print("Loading existing risk model...")
-    risk_model = joblib.load(RISK_MODEL_PATH)
-else:
-    risk_model = train_synthetic_risk_model()
+    # 2. Load Modality Classifier (3 classes)
+    from src.config import MODALITY_MODEL_PATH
+    if os.path.exists(MODALITY_MODEL_PATH):
+        mod_model, success = load_model_from_disk(MODALITY_MODEL_PATH, num_classes=3)
+        if success:
+            MODELS["modality_check"] = mod_model
+            print("✅ Loaded Auto-Modality Detector")
 
-
-# --- API REQUEST MODELS ---
-class RiskInput(BaseModel):
-    age: int
-    bmi: float
-    sys_bp: int
-    dia_bp: int
-    glucose: int
-    cholesterol: int
-    smoker: int # 0 or 1
+load_all_models()
 
 # --- ENDPOINTS ---
+
 @app.get("/")
 def read_root():
-    return {"message": "ML Service Running", "image_model": IMAGE_MODEL_TYPE, "risk_model": "Active"}
+    return {
+        "status": "Active",
+        "version": "3.0.0",
+        "loaded_models": list(MODELS.keys()),
+        "device": str(DEVICE)
+    }
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "timestamp": time.time(), "device": str(DEVICE)}
+
+@app.get("/scan-types")
+def get_scan_types():
+    return SCAN_CONDITIONS
 
 @app.post("/predict/image")
-async def predict_image(file: UploadFile = File(...)):
+async def predict_image(
+    file: UploadFile = File(...),
+    scan_type: Optional[str] = Form(default="xray")
+):
+    scan_type = scan_type.lower() if scan_type else "xray"
+    if scan_type not in SCAN_CONDITIONS: scan_type = "xray"
+    
+    start_time = time.time()
+    
     try:
+        # 1. Read and Process Image
         contents = await file.read()
         image = Image.open(io.BytesIO(contents)).convert("RGB")
-        input_tensor = image_preprocess(image)
-        input_batch = input_tensor.unsqueeze(0) 
+        
+        # 2. Save for Continuous Learning
+        image_id = str(uuid.uuid4())
+        upload_dir = os.path.join(DATA_DIR, "uploads", scan_type)
+        os.makedirs(upload_dir, exist_ok=True)
+        image_path = os.path.join(upload_dir, f"{image_id}.png")
+        image.save(image_path)
+        
+        # 3. Analyze Features (Real-time)
+        image_features = analyze_image_features(image)
+        
+        # --- AUTO-MODALITY CHECK ---
+        modality_model = MODELS.get("modality_check")
+        input_tensor = image_preprocess(image).unsqueeze(0).to(DEVICE)
+        
+        detected_scan_type = scan_type # Default to user request
+        auto_corrected = False
+        modality_debug = {}
+        
+        if modality_model:
+            try:
+                with torch.no_grad():
+                    mod_output = modality_model(input_tensor)
+                    mod_probs = torch.nn.functional.softmax(mod_output[0], dim=0)
+                    mod_conf, mod_pred_idx = torch.max(mod_probs, 0)
+                    
+                    # Mapping based on alphabetical order of folders: ct, mri, xray
+                    mod_classes = ["ct", "mri", "xray"]
+                    
+                    # Store basic debug info without verbose printing
+                    modality_debug = {
+                        "detected": mod_classes[mod_pred_idx.item()] if mod_pred_idx < 3 else "unknown",
+                        "confidence": float(mod_conf.item()),
+                        "requested": scan_type
+                    }
 
+                    if mod_pred_idx < len(mod_classes):
+                        detected_modality = mod_classes[mod_pred_idx.item()]
+                        
+                        # Lower threshold to 0.7 and ensure we don't correct if it matches
+                        if detected_modality != scan_type and mod_conf.item() > 0.7:
+                            print(f"⚠️ Auto-Correction: {scan_type} -> {detected_modality}")
+                            detected_scan_type = detected_modality
+                            auto_corrected = True
+            except Exception as e:
+                print(f"⚠️ Modality check failed: {e}")
+                modality_debug["error"] = str(e)
+        
+        # 4. Model Inference (Use detected type)
+        final_scan_type = detected_scan_type
+        model = MODELS.get(final_scan_type, MODELS.get("xray"))
+        is_trained = (final_scan_type in MODELS and 
+                     (os.path.exists(MODEL_FILES.get(final_scan_type, "")) or 
+                      (final_scan_type=="xray" and os.path.exists(GENERIC_MODEL_FILENAME))))
+        
         with torch.no_grad():
-            output = image_model(input_batch)
+            output = model(input_tensor)
+            probs = torch.nn.functional.softmax(output[0], dim=0)
+            
+        processing_time = time.time() - start_time
         
-        probabilities = torch.nn.functional.softmax(output[0], dim=0)
-        confidence, class_idx = torch.max(probabilities, 0)
+        # 5. Generate Diagnosis
+        diagnosis = get_diagnosis_from_prediction(
+            probs, image_features, final_scan_type, processing_time, is_trained
+        )
         
-        class_name = "Unknown"
-        if IMAGE_MODEL_TYPE == "Medical (Fine-Tuned)":
-            classes = ['Normal', 'Pneumonia']
-            class_name = classes[class_idx.item()] if class_idx.item() < len(classes) else "Unknown"
+        # Add auto-correction info
+        diagnosis["modality_debug"] = modality_debug
+        if auto_corrected:
+            diagnosis["findings"].insert(0, f"⚠️ Note: Auto-detected as {SCAN_CONDITIONS[final_scan_type]['name']} instead of {SCAN_CONDITIONS[scan_type]['name']}")
+            diagnosis["scan_type"] = SCAN_CONDITIONS[final_scan_type]['name'] # Update displayed type
+            diagnosis["auto_corrected"] = True
+        
+        # 6. Generate Recommendations (Simple heuristic moved here or kept in src? 
+        # For now, simplistic generation based on severity)
+        recs = []
+        if diagnosis['severity'] in ['High', 'Critical']:
+            recs.append("Urgent specialist consultation required")
+        elif diagnosis['severity'] == 'Medium':
+            recs.append("Follow-up imaging recommended")
         else:
-            # Demo Logic
-            class_name = "Pneumonia Detected" if confidence.item() > 0.8 else "Normal"
+            recs.append("No specific medical intervention required")
+            
+        diagnosis["recommendations"] = recs
+        diagnosis["id"] = image_id
+        # Use final_scan_type to ensure frontend sees the corrected modality
+        diagnosis["scan_type"] = SCAN_CONDITIONS[final_scan_type]["name"]
         
-        return {
-            "prediction": class_name,
-            "confidence": confidence.item(),
-            "details": f"Model: {IMAGE_MODEL_TYPE}"
-        }
+        return diagnosis
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class FeedbackRequest(BaseModel):
+    image_id: str
+    scan_type: str
+    correct_label: str
+
+@app.post("/feedback")
+def submit_feedback(feedback: FeedbackRequest):
+    try:
+        upload_dir = os.path.join(DATA_DIR, "uploads", feedback.scan_type)
+        # Assuming label matches folder name exactly
+        train_dir = os.path.join(DATA_DIR, feedback.scan_type, "train", feedback.correct_label)
+        os.makedirs(train_dir, exist_ok=True)
+        
+        filename = f"{feedback.image_id}.png"
+        src_path = os.path.join(upload_dir, filename)
+        dst_path = os.path.join(train_dir, filename)
+        
+        if not os.path.exists(src_path):
+            raise HTTPException(status_code=404, detail="Image not found in uploads")
+            
+        shutil.move(src_path, dst_path)
+        
+        return {"message": "Feedback received. Image added to training dataset."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class RetrainRequest(BaseModel):
+    scan_type: str
+    epochs: int = 5
+
+def run_retraining(scan_type: str, epochs: int):
+    with training_lock:
+        print(f"🔄 Starting background training for {scan_type}...")
+        # Create args object expected by train_model
+        args = argparse.Namespace(
+            modality=scan_type,
+            epochs=epochs,
+            batch_size=8,
+            lr=0.001
+        )
+        try:
+            # train.train_model returns path(s)
+            new_paths = train.train_model(args)
+            
+            if new_paths:
+                print(f"✅ Retraining complete. Reloading models...")
+                # Reload specific model
+                if isinstance(new_paths, list):
+                    load_all_models()
+                else:
+                    # Single model reload
+                    model, success = load_model_from_disk(new_paths)
+                    if success: MODELS[scan_type] = model
+        except Exception as e:
+            print(f"❌ Training error: {e}")
+
+@app.post("/retrain")
+async def trigger_retraining(request: RetrainRequest, background_tasks: BackgroundTasks):
+    if training_lock.locked():
+        raise HTTPException(status_code=409, detail="Training already in progress")
+    
+    background_tasks.add_task(run_retraining, request.scan_type, request.epochs)
+    return {"message": f"Retraining started for {request.scan_type}."}
+
+
+class RiskInput(BaseModel):
+    age: int; bmi: float; sys_bp: int; dia_bp: int; glucose: int; cholesterol: int; smoker: int
 
 @app.post("/predict/risk")
-def predict_risk(data: RiskInput):
+def predict_risk_endpoint(data: RiskInput):
     try:
-        input_df = pd.DataFrame([{
-            'age': data.age,
-            'bmi': data.bmi,
-            'sys_bp': data.sys_bp,
-            'dia_bp': data.dia_bp,
-            'glucose': data.glucose,
-            'cholesterol': data.cholesterol,
-            'smoker': data.smoker
-        }])
-        
-        # Predict probability of Class 1 (High Risk)
-        risk_prob = risk_model.predict_proba(input_df)[0][1]
-        
-        risk_level = "Low"
-        if risk_prob > 0.7:
-            risk_level = "High"
-        elif risk_prob > 0.4:
-            risk_level = "Medium"
-            
-        return {
-            "risk_score": float(risk_prob),
-            "risk_level": risk_level,
-            "recommendation": generate_recommendation(risk_level, data)
-        }
+        return predict_patient_risk(risk_model, data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-def generate_recommendation(risk_level, data):
-    recs = []
-    if data.smoker == 1:
-        recs.append("Cessation of smoking is accurate advised.")
-    if data.bmi > 25:
-        recs.append("Weight management program recommended.")
-    if data.sys_bp > 130:
-        recs.append("Monitor blood pressure regularily.")
-        
-    if risk_level == "High":
-        recs.insert(0, "IMMEDIATE CONSULTATION REQUIRED with a cardiologist.")
-    elif risk_level == "Medium":
-        recs.insert(0, "Schedule a check-up within the next month.")
-        
-    return recs if recs else ["Maintain current healthy lifestyle."]
 
 if __name__ == "__main__":
     import uvicorn

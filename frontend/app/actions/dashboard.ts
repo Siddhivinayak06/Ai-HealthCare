@@ -101,3 +101,115 @@ export async function getConditionBreakdown(): Promise<
     return []
   }
 }
+
+export async function getPredictionStats(): Promise<{
+  activePredictions: number
+  accuracyRate: number
+  highRiskPatients: number
+  predictionsToday: number
+  predictionsThisWeek: number
+}> {
+  try {
+    const res = await fetch(`${API_URL}/dashboard/prediction-stats`, {
+      headers: {
+        Authorization: `Bearer ${await getSessionToken()}`,
+      },
+      cache: "no-store"
+    })
+
+    if (!res.ok) {
+      return {
+        activePredictions: 0,
+        accuracyRate: 0,
+        highRiskPatients: 0,
+        predictionsToday: 0,
+        predictionsThisWeek: 0,
+      }
+    }
+    return await res.json()
+  } catch (error) {
+    console.error("Error getting prediction stats:", error)
+    return {
+      activePredictions: 0,
+      accuracyRate: 0,
+      highRiskPatients: 0,
+      predictionsToday: 0,
+      predictionsThisWeek: 0,
+    }
+  }
+}
+
+export async function getRiskDistribution(): Promise<
+  Array<{
+    month: string
+    low: number
+    moderate: number
+    high: number
+    critical: number
+  }>
+> {
+  try {
+    const res = await fetch(`${API_URL}/dashboard/risk-distribution`, {
+      headers: {
+        Authorization: `Bearer ${await getSessionToken()}`,
+      },
+      cache: "no-store"
+    })
+
+    if (!res.ok) return []
+    return await res.json()
+  } catch (error) {
+    console.error("Error getting risk distribution:", error)
+    return []
+  }
+}
+
+export async function getModelAccuracy(): Promise<
+  Array<{
+    model: string
+    accuracy: number
+    color: string
+  }>
+> {
+  try {
+    const res = await fetch(`${API_URL}/dashboard/model-accuracy`, {
+      headers: {
+        Authorization: `Bearer ${await getSessionToken()}`,
+      },
+      cache: "no-store"
+    })
+
+    if (!res.ok) return []
+    return await res.json()
+  } catch (error) {
+    console.error("Error getting model accuracy:", error)
+    return []
+  }
+}
+
+export async function getPatientPredictions(limit: number = 5): Promise<
+  Array<{
+    id: string
+    patientName: string
+    patientId: string
+    condition: string
+    riskScore: number
+    lastUpdated: string
+    trend: "improving" | "stable" | "worsening"
+  }>
+> {
+  try {
+    const res = await fetch(`${API_URL}/dashboard/patient-predictions?limit=${limit}`, {
+      headers: {
+        Authorization: `Bearer ${await getSessionToken()}`,
+      },
+      cache: "no-store"
+    })
+
+    if (!res.ok) return []
+    return await res.json()
+  } catch (error) {
+    console.error("Error getting patient predictions:", error)
+    return []
+  }
+}

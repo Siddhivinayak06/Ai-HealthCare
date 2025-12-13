@@ -38,6 +38,7 @@ export async function signIn(formData: FormData) {
   }
 
   const result = await authenticateUser(email, password)
+  console.log("SignIn Result:", result)
 
   if (!result.success || !result.user || !result.token) {
     return { error: result.error }

@@ -81,8 +81,8 @@ const createPatient = async (req, res) => {
             bloodType, allergies, medicalConditions, userId // Added userId to destructuring
         } = req.body;
 
-        // Check if user is a patient (or 'user' role)
-        if (req.user.role === 'patient' || req.user.role === 'user') {
+        // Check if user is a patient
+        if (req.user.role === 'patient') {
             // Patients can only create one profile for themselves
             const existingPatient = await db.query('SELECT id FROM patients WHERE user_id = $1', [req.user.id]);
             if (existingPatient.rows.length > 0) {
