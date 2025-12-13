@@ -15,8 +15,10 @@ import {
   BrainIcon,
   MenuIcon,
   XIcon,
+  CalendarIcon,
 } from "@/components/icons"
 import { UserMenu } from "@/components/user-menu"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: ChartIcon },
@@ -24,8 +26,11 @@ const navigation = [
   { name: "Patient Data", href: "/patients", icon: UsersIcon },
   { name: "Risk Prediction", href: "/risk", icon: BrainIcon },
   { name: "Reports", href: "/reports", icon: FileTextIcon },
+  { name: "Prescriptions", href: "/prescriptions", icon: PillIcon },
+  { name: "Appointments", href: "/appointments", icon: CalendarIcon },
   { name: "Activity", href: "/activity", icon: ActivityIcon },
 ]
+import { PillIcon } from "lucide-react"
 
 type SidebarProps = {
   user?: {
@@ -71,15 +76,18 @@ export function Sidebar({ user }: SidebarProps) {
       >
         <div className="flex h-full flex-col">
           {/* Logo - enhanced with glow effect */}
-          <div className="flex items-center gap-3 px-6 py-6 border-b border-sidebar-border/30">
-            <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/70 shadow-lg shadow-primary/30">
-              <HeartPulseIcon className="h-5 w-5 text-primary-foreground" />
-              <div className="absolute inset-0 rounded-xl bg-primary/20 blur-xl" />
+          <div className="flex items-center justify-between px-6 py-6 border-b border-sidebar-border/30">
+            <div className="flex items-center gap-3">
+              <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/70 shadow-lg shadow-primary/30">
+                <HeartPulseIcon className="h-5 w-5 text-primary-foreground" />
+                <div className="absolute inset-0 rounded-xl bg-primary/20 blur-xl" />
+              </div>
+              <div>
+                <h1 className="font-bold text-sidebar-foreground text-lg tracking-tight">MedAI</h1>
+                <p className="text-xs text-muted-foreground font-medium">Diagnostics Platform</p>
+              </div>
             </div>
-            <div>
-              <h1 className="font-bold text-sidebar-foreground text-lg tracking-tight">MedAI</h1>
-              <p className="text-xs text-muted-foreground font-medium">Diagnostics Platform</p>
-            </div>
+            <ThemeToggle />
           </div>
 
           {/* Navigation - enhanced with better hover states */}
@@ -87,7 +95,7 @@ export function Sidebar({ user }: SidebarProps) {
             <p className="px-3 mb-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Main Menu</p>
             {navigation.map((item) => {
               // RBAC Logic
-              if (user?.role === "patient" || user?.role === "user") {
+              if (user?.role === "patient") {
                 if (["Patient Data", "Reports"].includes(item.name)) {
                   // Keep these but maybe rename "Patient Data" to "My Profile"?
                   // Or just hide "Patient Data" list view since they have the dashboard?

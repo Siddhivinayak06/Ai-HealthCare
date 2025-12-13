@@ -11,7 +11,7 @@ const getReports = async (req, res) => {
     try {
         let result;
 
-        if (req.user.role === 'patient' || req.user.role === 'user') {
+        if (req.user.role === 'patient') {
             // Find patient record first
             const patientCheck = await db.query('SELECT id FROM patients WHERE user_id = $1', [req.user.id]);
             if (patientCheck.rows.length === 0) {

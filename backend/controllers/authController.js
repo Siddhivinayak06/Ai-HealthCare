@@ -61,6 +61,7 @@ const loginUser = async (req, res) => {
         const result = await db.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
 
         if (result.rows.length === 0) {
+            console.log(`Login failed: User not found for email ${email}`);
             return res.status(400).json({ message: 'Invalid credentials' });
         }
 
@@ -76,6 +77,7 @@ const loginUser = async (req, res) => {
                 token: generateToken(user.id),
             });
         } else {
+            console.log(`Login failed: Password mismatch for ${email}`);
             res.status(400).json({ message: 'Invalid credentials' });
         }
     } catch (error) {
@@ -164,10 +166,24 @@ const changePassword = async (req, res) => {
     }
 };
 
+// @desc    Get all doctors
+// @route   GET /api/auth/doctors
+// @access  Private
+const getDoctors = async (req, res) => {
+    try {
+        const result = await db.query('SELECT id, name, email FROM users WHERE role = $1', ['doctor']);
+        res.status(200).json(result.rows);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
 module.exports = {
     registerUser,
     loginUser,
     getMe,
     updateProfile,
     changePassword,
+    getDoctors,
 };
