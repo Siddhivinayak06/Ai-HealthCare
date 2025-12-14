@@ -60,12 +60,11 @@ router.post('/image', protect, upload.single('file'), async (req, res) => {
         });
 
         // Forward to ML Service using axios (better form-data support than fetch)
-        // Increased timeout to 60s to handle Render Cold Starts and Model Loading
+        // Timeout removed as per user request
         const response = await axios.post(`${ML_SERVICE_URL}/predict/image`, formData, {
             headers: {
                 ...formData.getHeaders(),
             },
-            timeout: 60000,
         });
 
         res.json(response.data);
