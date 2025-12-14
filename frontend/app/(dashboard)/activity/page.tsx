@@ -3,6 +3,8 @@ import { ActivityList } from "@/components/activity-list"
 import { getAllActivity } from "@/app/actions/activity"
 import { Activity, Clock, CheckCircle, AlertCircle } from "lucide-react"
 
+export const dynamic = 'force-dynamic'
+
 export default async function ActivityPage() {
   const activities = await getAllActivity()
 

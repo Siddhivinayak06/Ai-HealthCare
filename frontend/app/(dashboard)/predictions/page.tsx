@@ -9,6 +9,8 @@ import { ImageDiagnostics } from "@/components/image-diagnostics"
 import { BrainIcon, CheckCircleIcon, AlertCircleIcon, ActivityIcon } from "@/components/icons"
 import { getPredictionStats, getRiskDistribution, getModelAccuracy, getPatientPredictions } from "@/app/actions/dashboard"
 
+export const dynamic = 'force-dynamic'
+
 export default async function PredictionsPage() {
   // Fetch all data in parallel for better performance
   const [stats, riskDistributionData, modelAccuracyData, patientPredictionsData] = await Promise.all([

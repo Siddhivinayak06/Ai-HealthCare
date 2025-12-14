@@ -10,10 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { UserIcon, ShieldIcon, SettingsIcon, LoaderIcon, CheckCircleIcon } from "@/components/icons"
 import { updateProfile, updateUserSettings, changePassword } from "@/app/actions/settings"
-import type { User, UserSettings } from "@/lib/db"
+import type { User } from "@/lib/auth"
+import type { UserSettings } from "@/lib/db"
 
 interface SettingsFormProps {
-  user: Omit<User, "password_hash"> | null
+  user: User | null
   settings: UserSettings | null
 }
 
