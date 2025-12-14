@@ -57,30 +57,86 @@ export function ImageDiagnostics() {
         }
     }
 
+    const resizeImage = (file: File): Promise<Blob> => {
+        return new Promise((resolve, reject) => {
+            const img = new Image()
+            img.src = URL.createObjectURL(file)
+            img.onload = () => {
+                const canvas = document.createElement("canvas")
+                let width = img.width
+                let height = img.height
+                const maxDim = 800 // Safe upper bound for model (224px input)
+
+                if (width > maxDim || height > maxDim) {
+                    if (width > height) {
+                        height = Math.round((height * maxDim) / width)
+                        width = maxDim
+                    } else {
+                        width = Math.round((width * maxDim) / height)
+                        height = maxDim
+                    }
+                }
+
+                canvas.width = width
+                canvas.height = height
+                const ctx = canvas.getContext("2d")
+                if (!ctx) {
+                    reject(new Error("Failed to get canvas context"))
+                    return
+                }
+                ctx.drawImage(img, 0, 0, width, height)
+
+                canvas.toBlob(
+                    (blob) => {
+                        if (blob) {
+                            resolve(blob)
+                        } else {
+                            reject(new Error("Canvas to Blob failed"))
+                        }
+                    },
+                    "image/jpeg",
+                    0.85
+                )
+            }
+            img.onerror = (err) => reject(err)
+        })
+    }
+
     const handleAnalyze = async () => {
         if (!file) return
 
         setLoading(true)
         setError(null)
 
-        const formData = new FormData()
-        formData.append("file", file)
-
         try {
+            // Resize image before upload to speed up transmission
+            // Model only uses 224x224, so sending 4k images is wasteful/slow
+            const resizedBlob = await resizeImage(file)
+
+            const formData = new FormData()
+            formData.append("file", resizedBlob, file.name)
+            // Add scan type if you have a selector, generic fallback for now
+            formData.append("scan_type", "xray")
+
             const response = await fetch("/api/predict/image", {
                 method: "POST",
                 body: formData,
             })
 
             if (!response.ok) {
+                const errData = await response.json().catch(() => ({}))
+                // Handle the 503 Service Unavailable specifically
+                if (response.status === 503) {
+                    throw new Error(errData.details || "Service is waking up. Please try again in a moment.")
+                }
                 throw new Error("Analysis failed")
             }
 
             const data = await response.json()
             setResult(data)
-        } catch (err) {
+        } catch (err: any) {
             console.error(err)
-            setError("Failed to analyze image. Please try again.")
+            setError(err.message || "Failed to analyze image. Please try again.")
         } finally {
             setLoading(false)
         }
