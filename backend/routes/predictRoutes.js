@@ -60,16 +60,28 @@ router.post('/image', protect, upload.single('file'), async (req, res) => {
         });
 
         // Forward to ML Service using axios (better form-data support than fetch)
+        // Added 5s timeout to prevent infinite loading
         const response = await axios.post(`${ML_SERVICE_URL}/predict/image`, formData, {
             headers: {
                 ...formData.getHeaders(),
             },
+            timeout: 5000,
         });
 
         res.json(response.data);
 
     } catch (error) {
         console.error('Error proxying image to ML service:', error.message);
+
+        // Handle Timeout and Connection Refused explicitly
+        if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+            console.error(`Failed to connect to ML Service at ${ML_SERVICE_URL}`);
+            return res.status(503).json({
+                message: 'ML Service Unavailable',
+                details: `Could not connect to ML Service (${error.code}). Please check server logs.`
+            });
+        }
+
         if (error.response) {
             console.error('ML Service Response:', error.response.data);
             return res.status(error.response.status).json({
