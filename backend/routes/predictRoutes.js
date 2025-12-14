@@ -60,12 +60,12 @@ router.post('/image', protect, upload.single('file'), async (req, res) => {
         });
 
         // Forward to ML Service using axios (better form-data support than fetch)
-        // Added 5s timeout to prevent infinite loading
+        // Increased timeout to 60s to handle Render Cold Starts and Model Loading
         const response = await axios.post(`${ML_SERVICE_URL}/predict/image`, formData, {
             headers: {
                 ...formData.getHeaders(),
             },
-            timeout: 5000,
+            timeout: 60000,
         });
 
         res.json(response.data);
@@ -75,10 +75,13 @@ router.post('/image', protect, upload.single('file'), async (req, res) => {
 
         // Handle Timeout and Connection Refused explicitly
         if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
-            console.error(`Failed to connect to ML Service at ${ML_SERVICE_URL}`);
+            const isTimeout = error.code === 'ETIMEDOUT';
+            console.error(`Failed to connect to ML Service at ${ML_SERVICE_URL} (${isTimeout ? 'Timeout' : 'Refused'})`);
             return res.status(503).json({
-                message: 'ML Service Unavailable',
-                details: `Could not connect to ML Service (${error.code}). Please check server logs.`
+                message: isTimeout ? 'ML Service Timed Out' : 'ML Service Unavailable',
+                details: isTimeout
+                    ? 'The AI model is taking too long to respond (likely waking up from sleep). Please try again in a minute.'
+                    : 'Could not connect to ML Service. Please check server logs.'
             });
         }
 
