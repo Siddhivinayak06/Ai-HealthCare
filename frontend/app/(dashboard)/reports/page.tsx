@@ -4,6 +4,8 @@ import { getReports } from "@/app/actions/reports"
 import { getSession } from "@/lib/auth"
 import { FileText } from "lucide-react"
 
+export const dynamic = 'force-dynamic'
+
 export default async function ReportsPage() {
   const reports = await getReports()
   const { user } = await getSession()

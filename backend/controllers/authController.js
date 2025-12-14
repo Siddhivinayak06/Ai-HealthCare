@@ -1,6 +1,8 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const db = require('../config/db');
+const sendEmail = require('../utils/sendEmail');
 
 // Helper to generate JWT
 const generateToken = (id) => {
@@ -92,7 +94,7 @@ const loginUser = async (req, res) => {
 const getMe = async (req, res) => {
     try {
         // req.user is set by auth middleware
-        const result = await db.query('SELECT id, email, name, role, created_at FROM users WHERE id = $1', [req.user.id]);
+        const result = await db.query('SELECT id, email, name, role, created_at, updated_at FROM users WHERE id = $1', [req.user.id]);
         res.status(200).json(result.rows[0]);
     } catch (error) {
         console.error(error);
@@ -166,6 +168,113 @@ const changePassword = async (req, res) => {
     }
 };
 
+// @desc    Forgot Password
+// @route   POST /api/auth/forgot-password
+// @access  Public
+const forgotPassword = async (req, res) => {
+    const { email } = req.body;
+
+    try {
+        const userResult = await db.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+        const user = userResult.rows[0];
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Get Reset Token
+        const resetToken = crypto.randomBytes(20).toString('hex');
+
+        // Hash token and set to reset_password_token field
+        const resetPasswordToken = crypto
+            .createHash('sha256')
+            .update(resetToken)
+            .digest('hex');
+
+        // Set expire (10 minutes)
+        // PostgreSQL interval syntax or calculate date in JS
+        const resetPasswordExpire = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+
+        await db.query(
+            'UPDATE users SET reset_password_token = $1, reset_password_expires = $2 WHERE id = $3',
+            [resetPasswordToken, resetPasswordExpire, user.id]
+        );
+
+        // Create reset URL
+        const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+
+        const message = `You are receiving this email because you (or someone else) has requested the reset of a password. \n\n Please click on the following link to reset your password: \n\n ${resetUrl}`;
+
+        try {
+            await sendEmail({
+                email: user.email,
+                subject: 'Password Reset Token',
+                message,
+                html: `<p>You requested a password reset</p><p>Click this link to reset your password:</p><a href="${resetUrl}">${resetUrl}</a>`
+            });
+
+            res.status(200).json({ success: true, data: 'Email sent' });
+        } catch (err) {
+            console.error(err);
+            // Clear fields if email fails
+            await db.query(
+                'UPDATE users SET reset_password_token = NULL, reset_password_expires = NULL WHERE id = $1',
+                [user.id]
+            );
+            return res.status(500).json({ message: 'Email could not be sent' });
+        }
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// @desc    Reset Password
+// @route   PUT /api/auth/reset-password
+// @access  Public
+const resetPassword = async (req, res) => {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+        return res.status(400).json({ message: 'Invalid request' });
+    }
+
+    // Get hashed token
+    const resetPasswordToken = crypto
+        .createHash('sha256')
+        .update(token)
+        .digest('hex');
+
+    try {
+        const userResult = await db.query(
+            'SELECT * FROM users WHERE reset_password_token = $1 AND reset_password_expires > $2',
+            [resetPasswordToken, new Date()] // Check if now is before expires
+        );
+
+        const user = userResult.rows[0];
+
+        if (!user) {
+            return res.status(400).json({ message: 'Invalid token' });
+        }
+
+        // Set new password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        await db.query(
+            'UPDATE users SET password_hash = $1, reset_password_token = NULL, reset_password_expires = NULL WHERE id = $2',
+            [hashedPassword, user.id]
+        );
+
+        res.status(200).json({ success: true, data: 'Password updated' });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
 // @desc    Get all doctors
 // @route   GET /api/auth/doctors
 // @access  Private
@@ -185,5 +294,7 @@ module.exports = {
     getMe,
     updateProfile,
     changePassword,
+    forgotPassword,
+    resetPassword,
     getDoctors,
 };
