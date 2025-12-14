@@ -29,34 +29,67 @@ MODELS: Dict[str, torch.nn.Module] = {}
 training_lock = Lock()
 risk_model = get_risk_model()
 
-# --- INITIALIZATION ---
+
+# --- INITIALIZATION & LAZY LOADING ---
+def get_model_lazy(model_key: str):
+    """
+    Retrieves a model from the global cache, loading it from disk if not present.
+    """
+    if model_key in MODELS:
+        return MODELS[model_key]
+
+    with training_lock:
+        # Double-check pattern
+        if model_key in MODELS:
+             return MODELS[model_key]
+
+        print(f"🔄 Lazy loading model: {model_key}...")
+        
+        # 1. Handle "modality_check" speical case
+        if model_key == "modality_check":
+            from src.config import MODALITY_MODEL_PATH
+            if os.path.exists(MODALITY_MODEL_PATH):
+                mod_model, success = load_model_from_disk(MODALITY_MODEL_PATH, num_classes=3)
+                if success:
+                    MODELS["modality_check"] = mod_model
+                    print("✅ Loaded Auto-Modality Detector")
+                    return mod_model
+            return None
+
+        # 2. Handle specific imaging models
+        if model_key in MODEL_FILES:
+            filename = MODEL_FILES[model_key]
+            model, success = load_model_from_disk(filename)
+            if success:
+                MODELS[model_key] = model
+                return model
+        
+        # 3. Fallbacks
+        if model_key == "xray" and os.path.exists(GENERIC_MODEL_FILENAME):
+            print(f"ℹ️ Using generic legacy model for {model_key}")
+            model, _ = load_model_from_disk(GENERIC_MODEL_FILENAME)
+            MODELS["xray"] = model
+            return model
+        
+        # 4. Untrained fallback
+        if model_key in SCAN_CONDITIONS: # Only return fallback for known types
+            print(f"ℹ️ Using generic backbone for {model_key} (Untrained)")
+            model = get_fallback_model()
+            MODELS[model_key] = model
+            return model
+
+        return None
+
+# Deprecated but kept for compatibility with retrain logic if needed, 
+# though retrain should ideally reload just one.
 def load_all_models():
-    """Reloads all models from disk"""
-    print(f"\n--- Loading Imaging Models on {DEVICE} ---")
-    
-    # 1. Try to load specific models
-    for modality, filename in MODEL_FILES.items():
-        model, success = load_model_from_disk(filename)
-        if success:
-            MODELS[modality] = model
-        else:
-            # Fallback for X-Ray legacy
-            if modality == "xray" and os.path.exists(GENERIC_MODEL_FILENAME):
-                print(f"ℹ️ Using generic legacy model for {modality}")
-                MODELS["xray"], _ = load_model_from_disk(GENERIC_MODEL_FILENAME)
-            else:
-                print(f"ℹ️ Using generic backbone for {modality} (Untrained)")
-                MODELS[modality] = get_fallback_model()
+    """Reloads all known models from disk (Avoid calling at startup!)"""
+    print("⚠️ Warning: Loading ALL models at once. High memory usage possible.")
+    keys = list(MODEL_FILES.keys()) + ["modality_check"]
+    for k in keys:
+        get_model_lazy(k)
 
-    # 2. Load Modality Classifier (3 classes)
-    from src.config import MODALITY_MODEL_PATH
-    if os.path.exists(MODALITY_MODEL_PATH):
-        mod_model, success = load_model_from_disk(MODALITY_MODEL_PATH, num_classes=3)
-        if success:
-            MODELS["modality_check"] = mod_model
-            print("✅ Loaded Auto-Modality Detector")
-
-load_all_models()
+# REMOVED: load_all_models() call at startup to fix OOM 137
 
 # --- ENDPOINTS ---
 
@@ -65,7 +98,7 @@ def read_root():
     return {
         "status": "Active",
         "version": "3.0.0",
-        "loaded_models": list(MODELS.keys()),
+        "loaded_models_in_memory": list(MODELS.keys()),
         "device": str(DEVICE)
     }
 
@@ -103,7 +136,7 @@ async def predict_image(
         image_features = analyze_image_features(image)
         
         # --- AUTO-MODALITY CHECK ---
-        modality_model = MODELS.get("modality_check")
+        modality_model = get_model_lazy("modality_check")
         input_tensor = image_preprocess(image).unsqueeze(0).to(DEVICE)
         
         detected_scan_type = scan_type # Default to user request
@@ -141,7 +174,7 @@ async def predict_image(
         
         # 4. Model Inference (Use detected type)
         final_scan_type = detected_scan_type
-        model = MODELS.get(final_scan_type, MODELS.get("xray"))
+        model = get_model_lazy(final_scan_type)
         is_trained = (final_scan_type in MODELS and 
                      (os.path.exists(MODEL_FILES.get(final_scan_type, "")) or 
                       (final_scan_type=="xray" and os.path.exists(GENERIC_MODEL_FILENAME))))

@@ -72,3 +72,7 @@ coverage/
 # Temporary
 tmp/
 temp/
+
+# Project Specific
+ml-modal/data/
+
