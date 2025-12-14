@@ -93,7 +93,7 @@ def load_all_models():
 
 # --- ENDPOINTS ---
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def read_root():
     return {
         "status": "Active",
@@ -102,7 +102,7 @@ def read_root():
         "device": str(DEVICE)
     }
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
     return {"status": "healthy", "timestamp": time.time(), "device": str(DEVICE)}
 
