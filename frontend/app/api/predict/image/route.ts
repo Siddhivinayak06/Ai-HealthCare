@@ -23,22 +23,26 @@ export async function POST(request: Request) {
         const arrayBuffer = await file.arrayBuffer()
         const blob = new Blob([arrayBuffer], { type: file.type })
 
-        // Create new FormData for ML service request
-        const mlFormData = new FormData()
-        mlFormData.append("file", blob, file.name)
-        mlFormData.append("scan_type", scanType)
+        // Create new FormData for Backend request
+        const backendFormData = new FormData()
+        backendFormData.append("file", blob, file.name)
+        backendFormData.append("scan_type", scanType)
 
-        // Forward directly to ML service
-        const mlServiceUrl = process.env.ML_SERVICE_URL || "http://localhost:8000"
+        // Forward to Express Backend (which then proxies to ML Service)
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api"
 
-        const response = await fetch(`${mlServiceUrl}/predict/image`, {
+        const response = await fetch(`${apiUrl}/predict/image`, {
             method: "POST",
-            body: mlFormData,
+            headers: {
+                // Do NOT set Content-Type here, let fetch set it with boundary for FormData
+                "Authorization": `Bearer ${token}`,
+            },
+            body: backendFormData,
         })
 
         if (!response.ok) {
             const errorText = await response.text()
-            console.error("ML Service error:", errorText)
+            console.error("Backend error:", errorText)
             return Response.json(
                 { error: "Analysis failed", details: errorText },
                 { status: response.status }
