@@ -10,6 +10,7 @@ Ai-HealthCare is a comprehensive, AI-powered healthcare diagnostics system desig
 - **Patient Risk Assessment**: Non-invasive risk modeling based on vital signs (BP, Glucose, BMI) to predict potential health issues.
 - **Interactive Provider Dashboard**: A sleek, high-performance interface for doctors to manage patients, review scans, and track diagnostic accuracy.
 - **AI-Driven Health Assistant**: Real-time chat interface for patients and providers to query health data and insights.
+- **Explainable AI (XAI)**: Visualizes model decision-making by highlighting key regions in scans using Grad-CAM.
 
 ## 🛠 Tech Stack
 
@@ -66,12 +67,27 @@ The application comprises three specialized services working in harmony:
     ```
     *This will initialize the ML Service (port 8000), Backend (port 5000), and you can then start the Frontend separately: `cd frontend && npm run dev`.*
 
-## 📈 ML Continuous Learning
+## 📈 ML Continuous Learning & Training
 
 Our system features a "Human-in-the-loop" approach:
 1. **Predict**: AI provides a preliminary diagnosis.
 2. **Review**: Medical experts provide feedback via the `/feedback` endpoint.
-3. **Enhance**: Data is automatically moved to training sets, and the `/retrain` endpoint can be triggered to update models with new information.
+3. **Enhance**: Data is automatically moved to training sets.
+
+### Specialized Training Scripts
+You can now train individual models using specialized scripts in the `ml-modal` directory:
+- **X-Ray**: `python train_xray.py --epochs 10 --model densenet`
+- **CT Scan**: `python train_ct.py --epochs 10 --model resnet`
+- **MRI**: `python train_mri.py --epochs 10 --model efficientnet`
+- **Modality Check**: `python train_modality.py --epochs 10`
+
+*All scripts support `--epochs`, `--batch_size`, `--lr`, and `--finetune` parameters.*
+
+### Unified Retraining
+The original `train.py` remains as a dispatcher for bulk training or API-triggered retraining:
+```bash
+python train.py --modality all --model densenet --finetune
+```
 
 ## 📄 License
 
