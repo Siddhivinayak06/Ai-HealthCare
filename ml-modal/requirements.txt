@@ -7,3 +7,10 @@ python-multipart
 torch
 torchvision
 pillow
+opencv-python-headless
+matplotlib
+shap
+transformers
+pymupdf
+spacy
+datasets
