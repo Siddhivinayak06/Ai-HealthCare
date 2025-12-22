@@ -28,6 +28,7 @@ const formSchema = z.object({
 export default function RiskPage() {
     const [loading, setLoading] = useState(false)
     const [result, setResult] = useState<any>(null)
+    const [explain, setExplain] = useState(false)
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -51,7 +52,7 @@ export default function RiskPage() {
                 smoker: values.smoker === "yes" ? 1 : 0
             }
 
-            const result = await predictRisk(apiData)
+            const result = await predictRisk(apiData, explain)
 
             if (!result.success) throw new Error(result.error)
 
@@ -267,6 +268,28 @@ export default function RiskPage() {
                                         </FormItem>
                                     )} />
 
+                                    <div className="flex items-center justify-between p-3 rounded-lg bg-primary/5 border border-primary/10">
+                                        <div className="space-y-0.5">
+                                            <FormLabel className="text-sm font-semibold flex items-center gap-2">
+                                                <Sparkles className="h-4 w-4 text-primary" />
+                                                AI Explainability
+                                            </FormLabel>
+                                            <p className="text-xs text-muted-foreground">Show clinical factors contributing to risk</p>
+                                        </div>
+                                        <div
+                                            onClick={() => setExplain(!explain)}
+                                            className={cn(
+                                                "w-10 h-6 rounded-full p-1 cursor-pointer transition-colors duration-200",
+                                                explain ? "bg-primary" : "bg-muted"
+                                            )}
+                                        >
+                                            <div className={cn(
+                                                "w-4 h-4 bg-white rounded-full transition-transform duration-200",
+                                                explain ? "translate-x-4" : "translate-x-0"
+                                            )} />
+                                        </div>
+                                    </div>
+
                                     <Button
                                         type="submit"
                                         className="w-full h-12 text-base font-semibold bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white border-0 shadow-lg shadow-rose-500/25 transition-all duration-300 hover:shadow-rose-500/40 hover:scale-[1.02]"
@@ -357,6 +380,51 @@ export default function RiskPage() {
                                             {result.risk_level} Risk Level
                                         </Badge>
                                     </div>
+
+                                    {/* Clinical Insights (SHAP) */}
+                                    {result.explanation && (
+                                        <div className="space-y-4 pt-4 border-t border-border/50 animate-in fade-in slide-in-from-bottom duration-500">
+                                            <h4 className="font-semibold flex items-center gap-2 text-primary">
+                                                <Brain className="h-4 w-4" />
+                                                AI Clinical Insights
+                                            </h4>
+
+                                            <div className="p-3 rounded-xl bg-primary/5 border border-primary/10 italic text-sm text-foreground/80 leading-relaxed">
+                                                "{result.explanation.doctor_note}"
+                                            </div>
+
+                                            <div className="grid gap-2">
+                                                {result.explanation.structured_summary.map((point: any, i: number) => (
+                                                    <div
+                                                        key={i}
+                                                        className="flex items-center justify-between p-2.5 rounded-lg bg-background/50 border border-border/50 text-xs"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <div className={cn(
+                                                                "h-2 w-2 rounded-full",
+                                                                point.direction === "increases" ? "bg-rose-500" : "bg-emerald-500"
+                                                            )} />
+                                                            <span className="font-medium">{point.feature}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <Badge variant="outline" className={cn(
+                                                                "text-[10px] py-0 px-2",
+                                                                point.impact === "High" ? "border-rose-500/30 text-rose-500" : "border-amber-500/30 text-amber-500"
+                                                            )}>
+                                                                {point.impact} Impact
+                                                            </Badge>
+                                                            <span className={cn(
+                                                                "font-bold",
+                                                                point.direction === "increases" ? "text-rose-500" : "text-emerald-500"
+                                                            )}>
+                                                                {point.direction === "increases" ? "+" : "-"}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Recommendations */}
                                     <div className="space-y-3 pt-4 border-t border-border/50">

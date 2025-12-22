@@ -1,4 +1,6 @@
-const db = require('../config/db');
+const { db } = require('../db');
+const { imageAnalyses, riskPredictions, patients } = require('../db/schema');
+const { eq, and, desc } = require('drizzle-orm');
 const { logActivityInternal } = require('./activityController');
 
 // @desc    Save image analysis
@@ -11,25 +13,29 @@ const saveImageAnalysis = async (req, res) => {
             severity, findings, recommendations, processingTime, modelVersion
         } = req.body;
 
-        const result = await db.query(
-            `INSERT INTO image_analyses (
-                user_id, patient_id, scan_type, image_url, diagnosis, confidence,
-                severity, findings, recommendations, processing_time, model_version
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-            [
-                req.user.id, patientId || null, scanType, imageUrl || null,
-                diagnosis, confidence, severity, JSON.stringify(findings),
-                recommendations, processingTime, modelVersion
-            ]
-        );
+        const result = await db.insert(imageAnalyses).values({
+            userId: req.user.id,
+            patientId: patientId || null,
+            scanType,
+            imageUrl: imageUrl || null,
+            diagnosis,
+            confidence: confidence ? confidence.toString() : null,
+            severity,
+            findings,
+            recommendations,
+            processingTime: processingTime ? processingTime.toString() : null,
+            modelVersion
+        }).returning();
+
+        const newAnalysis = result[0];
 
         await logActivityInternal(req.user.id, "Image analysis completed", "analysis", {
             scanType,
             severity,
-            analysisId: result.rows[0].id
+            analysisId: newAnalysis.id
         });
 
-        res.status(201).json(result.rows[0]);
+        res.status(201).json(newAnalysis);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server error' });
@@ -41,17 +47,31 @@ const saveImageAnalysis = async (req, res) => {
 // @access  Private
 const getRecentAnalyses = async (req, res) => {
     try {
-        const limit = req.query.limit || 10;
-        const result = await db.query(`
-            SELECT ia.*, p.first_name, p.last_name 
-            FROM image_analyses ia
-            LEFT JOIN patients p ON ia.patient_id = p.id
-            WHERE ia.user_id = $1
-            ORDER BY ia.created_at DESC
-            LIMIT $2
-        `, [req.user.id, limit]);
+        const limit = parseInt(req.query.limit) || 10;
+        const result = await db.select({
+            id: imageAnalyses.id,
+            userId: imageAnalyses.userId,
+            patientId: imageAnalyses.patientId,
+            scanType: imageAnalyses.scanType,
+            imageUrl: imageAnalyses.imageUrl,
+            diagnosis: imageAnalyses.diagnosis,
+            confidence: imageAnalyses.confidence,
+            severity: imageAnalyses.severity,
+            findings: imageAnalyses.findings,
+            recommendations: imageAnalyses.recommendations,
+            processingTime: imageAnalyses.processingTime,
+            modelVersion: imageAnalyses.modelVersion,
+            createdAt: imageAnalyses.createdAt,
+            firstName: patients.firstName,
+            lastName: patients.lastName
+        })
+            .from(imageAnalyses)
+            .leftJoin(patients, eq(imageAnalyses.patientId, patients.id))
+            .where(eq(imageAnalyses.userId, req.user.id))
+            .orderBy(desc(imageAnalyses.createdAt))
+            .limit(limit);
 
-        res.json(result.rows);
+        res.json(result);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server error' });
@@ -68,16 +88,17 @@ const saveRiskPrediction = async (req, res) => {
             severity, contributingFactors, recommendations
         } = req.body;
 
-        await db.query(
-            `INSERT INTO risk_predictions (
-                user_id, patient_id, health_record_id, condition, risk_score,
-                severity, contributing_factors, recommendations, model_version
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'HealthPredict v2.1')`,
-            [
-                req.user.id, patientId, healthRecordId || null,
-                condition, riskScore, severity, contributingFactors, recommendations
-            ]
-        );
+        await db.insert(riskPredictions).values({
+            userId: req.user.id,
+            patientId,
+            healthRecordId: healthRecordId || null,
+            condition,
+            riskScore: riskScore ? riskScore.toString() : null,
+            severity,
+            contributingFactors,
+            recommendations,
+            modelVersion: 'HealthPredict v2.1'
+        });
 
         await logActivityInternal(req.user.id, "Risk prediction generated", "prediction", {
             patientId,
@@ -97,11 +118,14 @@ const saveRiskPrediction = async (req, res) => {
 // @access  Private
 const getPatientPredictions = async (req, res) => {
     try {
-        const result = await db.query(
-            'SELECT * FROM risk_predictions WHERE patient_id = $1 AND user_id = $2 ORDER BY created_at DESC',
-            [req.params.patientId, req.user.id]
-        );
-        res.json(result.rows);
+        const result = await db.select().from(riskPredictions).where(
+            and(
+                eq(riskPredictions.patientId, req.params.patientId),
+                eq(riskPredictions.userId, req.user.id)
+            )
+        ).orderBy(desc(riskPredictions.createdAt));
+
+        res.json(result);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server error' });

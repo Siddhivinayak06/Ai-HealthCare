@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const db = require('./config/db');
+const { pool } = require('./db');
 
 dotenv.config();
 
@@ -31,7 +31,7 @@ app.get('/', (req, res) => {
 });
 
 // Test database connection
-db.query('SELECT NOW()')
+pool.query('SELECT NOW()')
   .then(() => console.log('Connected to Database at:', new Date().toISOString()))
   .catch(err => console.error('Database connection error:', err));
 

@@ -1,4 +1,10 @@
-const db = require('../config/db');
+const { db } = require('../db');
+const {
+    patients,
+    imageAnalyses,
+    riskPredictions
+} = require('../db/schema');
+const { eq, and, gte, lte, desc, count, sql: drizzleSql, avg } = require('drizzle-orm');
 
 // @desc    Get dashboard stats
 // @route   GET /api/dashboard/stats
@@ -8,28 +14,24 @@ const getStats = async (req, res) => {
         const userId = req.user.id;
 
         // Parallel execution for performance
-        const [analyses, patients, highRisk, today, thisWeek, lastWeek, accuracy] = await Promise.all([
-            db.query('SELECT COUNT(*) as total FROM image_analyses WHERE user_id = $1', [userId]),
-            db.query('SELECT COUNT(*) as total FROM patients WHERE user_id = $1', [userId]),
-            db.query(`
-                SELECT COUNT(DISTINCT patient_id) as total 
-                FROM risk_predictions 
-                WHERE user_id = $1 AND severity IN ('high', 'critical')
-            `, [userId]),
-            db.query('SELECT COUNT(*) as total FROM image_analyses WHERE user_id = $1 AND DATE(created_at) = CURRENT_DATE', [userId]),
-            db.query("SELECT COUNT(*) as total FROM image_analyses WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '7 days'", [userId]),
-            db.query("SELECT COUNT(*) as total FROM image_analyses WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '14 days' AND created_at < NOW() - INTERVAL '7 days'", [userId]),
-            db.query('SELECT AVG(confidence) as avg_confidence FROM image_analyses WHERE user_id = $1 AND confidence IS NOT NULL', [userId])
+        const [analyses, patientsCount, highRisk, today, thisWeek, lastWeek, accuracy] = await Promise.all([
+            db.select({ total: count() }).from(imageAnalyses).where(eq(imageAnalyses.userId, userId)),
+            db.select({ total: count() }).from(patients).where(eq(patients.userId, userId)),
+            db.select({ total: count(drizzleSql`DISTINCT ${riskPredictions.patientId}`) }).from(riskPredictions).where(and(eq(riskPredictions.userId, userId), drizzleSql`${riskPredictions.severity} IN ('high', 'critical')`)),
+            db.select({ total: count() }).from(imageAnalyses).where(and(eq(imageAnalyses.userId, userId), drizzleSql`DATE(${imageAnalyses.createdAt}) = CURRENT_DATE`)),
+            db.select({ total: count() }).from(imageAnalyses).where(and(eq(imageAnalyses.userId, userId), drizzleSql`${imageAnalyses.createdAt} >= NOW() - INTERVAL '7 days'`)),
+            db.select({ total: count() }).from(imageAnalyses).where(and(eq(imageAnalyses.userId, userId), drizzleSql`${imageAnalyses.createdAt} >= NOW() - INTERVAL '14 days' AND ${imageAnalyses.createdAt} < NOW() - INTERVAL '7 days'`)),
+            db.select({ avg_confidence: avg(imageAnalyses.confidence) }).from(imageAnalyses).where(and(eq(imageAnalyses.userId, userId), drizzleSql`${imageAnalyses.confidence} IS NOT NULL`))
         ]);
 
-        const analysesChange = Number(thisWeek.rows[0]?.total || 0) - Number(lastWeek.rows[0]?.total || 0);
+        const analysesChange = Number(thisWeek[0]?.total || 0) - Number(lastWeek[0]?.total || 0);
 
         res.json({
-            totalAnalyses: Number(analyses.rows[0]?.total || 0),
-            totalPatients: Number(patients.rows[0]?.total || 0),
-            highRiskPatients: Number(highRisk.rows[0]?.total || 0),
-            accuracyRate: Math.round(Number(accuracy.rows[0]?.avg_confidence || 89)),
-            analysesToday: Number(today.rows[0]?.total || 0),
+            totalAnalyses: Number(analyses[0]?.total || 0),
+            totalPatients: Number(patientsCount[0]?.total || 0),
+            highRiskPatients: Number(highRisk[0]?.total || 0),
+            accuracyRate: Math.round(Number(accuracy[0]?.avg_confidence || 0.89) * 100) / 100, // Handle decimal if confidence is 0-1
+            analysesToday: Number(today[0]?.total || 0),
             analysesChange,
             patientsChange: 0,
         });
@@ -46,31 +48,30 @@ const getAnalytics = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        const analyses = await db.query(`
-            SELECT 
-                TO_CHAR(DATE_TRUNC('month', created_at), 'Mon') as month,
-                COUNT(*) as count
-            FROM image_analyses 
-            WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '6 months'
-            GROUP BY DATE_TRUNC('month', created_at)
-            ORDER BY DATE_TRUNC('month', created_at)
-        `, [userId]);
+        const analyses = await db.select({
+            month: drizzleSql`TO_CHAR(DATE_TRUNC('month', ${imageAnalyses.createdAt}), 'Mon')`,
+            count: count(),
+            date: drizzleSql`DATE_TRUNC('month', ${imageAnalyses.createdAt})`
+        })
+            .from(imageAnalyses)
+            .where(and(eq(imageAnalyses.userId, userId), gte(imageAnalyses.createdAt, drizzleSql`NOW() - INTERVAL '6 months'`)))
+            .groupBy(drizzleSql`DATE_TRUNC('month', ${imageAnalyses.createdAt})`)
+            .orderBy(drizzleSql`DATE_TRUNC('month', ${imageAnalyses.createdAt})`);
 
-        const predictions = await db.query(`
-            SELECT 
-                TO_CHAR(DATE_TRUNC('month', created_at), 'Mon') as month,
-                COUNT(*) as count
-            FROM risk_predictions 
-            WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '6 months'
-            GROUP BY DATE_TRUNC('month', created_at)
-            ORDER BY DATE_TRUNC('month', created_at)
-        `, [userId]);
+        const predictions = await db.select({
+            month: drizzleSql`TO_CHAR(DATE_TRUNC('month', ${riskPredictions.createdAt}), 'Mon')`,
+            count: count(),
+            date: drizzleSql`DATE_TRUNC('month', ${riskPredictions.createdAt})`
+        })
+            .from(riskPredictions)
+            .where(and(eq(riskPredictions.userId, userId), gte(riskPredictions.createdAt, drizzleSql`NOW() - INTERVAL '6 months'`)))
+            .groupBy(drizzleSql`DATE_TRUNC('month', ${riskPredictions.createdAt})`)
+            .orderBy(drizzleSql`DATE_TRUNC('month', ${riskPredictions.createdAt})`);
 
-        // Mock data logic from frontend for demo consistency, but preferably real data
         const months = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         const data = months.map((month) => {
-            const analysesData = analyses.rows.find((r) => r.month === month);
-            const predictionsData = predictions.rows.find((p) => p.month === month);
+            const analysesData = analyses.find((r) => r.month === month);
+            const predictionsData = predictions.find((p) => p.month === month);
             return {
                 month,
                 analyses: Number(analysesData?.count || Math.floor(Math.random() * 50 + 20)),
@@ -92,16 +93,17 @@ const getConditions = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        const result = await db.query(`
-            SELECT scan_type as condition, COUNT(*) as count
-            FROM image_analyses
-            WHERE user_id = $1
-            GROUP BY scan_type
-            ORDER BY count DESC
-            LIMIT 5
-        `, [userId]);
+        const result = await db.select({
+            condition: imageAnalyses.scanType,
+            count: count()
+        })
+            .from(imageAnalyses)
+            .where(eq(imageAnalyses.userId, userId))
+            .groupBy(imageAnalyses.scanType)
+            .orderBy(desc(count()))
+            .limit(5);
 
-        const total = result.rows.reduce((sum, r) => sum + Number(r.count), 0) || 1;
+        const total = result.reduce((sum, r) => sum + Number(r.count), 0) || 1;
         const colors = [
             "hsl(var(--primary))",
             "hsl(var(--chart-2))",
@@ -110,7 +112,7 @@ const getConditions = async (req, res) => {
             "hsl(var(--chart-5))",
         ];
 
-        const data = result.rows.map((r, idx) => ({
+        const data = result.map((r, idx) => ({
             condition: r.condition,
             count: Number(r.count),
             percentage: Math.round((Number(r.count) / total) * 100),
@@ -131,24 +133,20 @@ const getPredictionStats = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        const [totalPredictions, highRiskPatients, predictionsToday, predictionsThisWeek, avgAccuracy] = await Promise.all([
-            db.query('SELECT COUNT(*) as total FROM risk_predictions WHERE user_id = $1', [userId]),
-            db.query(`
-                SELECT COUNT(DISTINCT patient_id) as total 
-                FROM risk_predictions 
-                WHERE user_id = $1 AND severity IN ('high', 'critical')
-            `, [userId]),
-            db.query('SELECT COUNT(*) as total FROM risk_predictions WHERE user_id = $1 AND DATE(created_at) = CURRENT_DATE', [userId]),
-            db.query("SELECT COUNT(*) as total FROM risk_predictions WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '7 days'", [userId]),
-            db.query('SELECT AVG(confidence) as avg FROM image_analyses WHERE user_id = $1 AND confidence IS NOT NULL', [userId])
+        const [totalPredictions, highRiskPatients, today, thisWeek, avgAccuracy] = await Promise.all([
+            db.select({ total: count() }).from(riskPredictions).where(eq(riskPredictions.userId, userId)),
+            db.select({ total: count(drizzleSql`DISTINCT ${riskPredictions.patientId}`) }).from(riskPredictions).where(and(eq(riskPredictions.userId, userId), drizzleSql`${riskPredictions.severity} IN ('high', 'critical')`)),
+            db.select({ total: count() }).from(riskPredictions).where(and(eq(riskPredictions.userId, userId), drizzleSql`DATE(${riskPredictions.createdAt}) = CURRENT_DATE`)),
+            db.select({ total: count() }).from(riskPredictions).where(and(eq(riskPredictions.userId, userId), drizzleSql`${riskPredictions.createdAt} >= NOW() - INTERVAL '7 days'`)),
+            db.select({ avg: avg(imageAnalyses.confidence) }).from(imageAnalyses).where(and(eq(imageAnalyses.userId, userId), drizzleSql`${imageAnalyses.confidence} IS NOT NULL`))
         ]);
 
         res.json({
-            activePredictions: Number(totalPredictions.rows[0]?.total || 0),
-            accuracyRate: Math.round(Number(avgAccuracy.rows[0]?.avg || 91.2)),
-            highRiskPatients: Number(highRiskPatients.rows[0]?.total || 0),
-            predictionsToday: Number(predictionsToday.rows[0]?.total || 0),
-            predictionsThisWeek: Number(predictionsThisWeek.rows[0]?.total || 0)
+            activePredictions: Number(totalPredictions[0]?.total || 0),
+            accuracyRate: Math.round(Number(avgAccuracy[0]?.avg || 0.912) * 100),
+            highRiskPatients: Number(highRiskPatients[0]?.total || 0),
+            predictionsToday: Number(today[0]?.total || 0),
+            predictionsThisWeek: Number(thisWeek[0]?.total || 0)
         });
     } catch (error) {
         console.error(error);
@@ -163,18 +161,17 @@ const getRiskDistribution = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        const result = await db.query(`
-            SELECT 
-                TO_CHAR(DATE_TRUNC('month', created_at), 'Mon') as month,
-                severity,
-                COUNT(*) as count
-            FROM risk_predictions 
-            WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '6 months'
-            GROUP BY DATE_TRUNC('month', created_at), severity
-            ORDER BY DATE_TRUNC('month', created_at)
-        `, [userId]);
+        const result = await db.select({
+            month: drizzleSql`TO_CHAR(DATE_TRUNC('month', ${riskPredictions.createdAt}), 'Mon')`,
+            severity: riskPredictions.severity,
+            count: count(),
+            date: drizzleSql`DATE_TRUNC('month', ${riskPredictions.createdAt})`
+        })
+            .from(riskPredictions)
+            .where(and(eq(riskPredictions.userId, userId), gte(riskPredictions.createdAt, drizzleSql`NOW() - INTERVAL '6 months'`)))
+            .groupBy(drizzleSql`DATE_TRUNC('month', ${riskPredictions.createdAt})`, riskPredictions.severity)
+            .orderBy(drizzleSql`DATE_TRUNC('month', ${riskPredictions.createdAt})`);
 
-        // Get last 6 months
         const months = [];
         for (let i = 5; i >= 0; i--) {
             const date = new Date();
@@ -183,7 +180,7 @@ const getRiskDistribution = async (req, res) => {
         }
 
         const data = months.map(month => {
-            const monthData = result.rows.filter(r => r.month === month);
+            const monthData = result.filter(r => r.month === month);
             return {
                 month,
                 low: Number(monthData.find(d => d.severity === 'low')?.count || 0),
@@ -207,17 +204,16 @@ const getModelAccuracy = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        const result = await db.query(`
-            SELECT 
-                scan_type as model,
-                ROUND(AVG(confidence)::numeric, 1) as accuracy,
-                COUNT(*) as count
-            FROM image_analyses 
-            WHERE user_id = $1 AND confidence IS NOT NULL
-            GROUP BY scan_type
-            ORDER BY accuracy DESC
-            LIMIT 6
-        `, [userId]);
+        const result = await db.select({
+            model: imageAnalyses.scanType,
+            accuracy: drizzleSql`ROUND(AVG(${imageAnalyses.confidence})::numeric, 1)`,
+            count: count()
+        })
+            .from(imageAnalyses)
+            .where(and(eq(imageAnalyses.userId, userId), drizzleSql`${imageAnalyses.confidence} IS NOT NULL`))
+            .groupBy(imageAnalyses.scanType)
+            .orderBy(desc(drizzleSql`AVG(${imageAnalyses.confidence})`))
+            .limit(6);
 
         const colors = [
             "var(--primary)",
@@ -228,7 +224,7 @@ const getModelAccuracy = async (req, res) => {
             "var(--muted-foreground)"
         ];
 
-        const data = result.rows.map((r, idx) => ({
+        const data = result.map((r, idx) => ({
             model: r.model || 'Unknown',
             accuracy: Number(r.accuracy || 0),
             color: colors[idx] || colors[0]
@@ -247,9 +243,11 @@ const getModelAccuracy = async (req, res) => {
 const getPatientPredictions = async (req, res) => {
     try {
         const userId = req.user.id;
-        const limit = req.query.limit || 5;
+        const limit = parseInt(req.query.limit) || 5;
 
-        const result = await db.query(`
+        // Drizzle doesn't support complex window functions directly as easily in a simple select, 
+        // so we might use a raw SQL for the window function part or just refactor.
+        const result = await db.execute(drizzleSql`
             SELECT 
                 rp.id,
                 CONCAT(p.first_name, ' ', p.last_name) as patient_name,
@@ -261,10 +259,10 @@ const getPatientPredictions = async (req, res) => {
                 LAG(rp.risk_score) OVER (PARTITION BY rp.patient_id ORDER BY rp.created_at) as prev_risk_score
             FROM risk_predictions rp
             JOIN patients p ON rp.patient_id = p.id
-            WHERE rp.user_id = $1
+            WHERE rp.user_id = ${userId}
             ORDER BY rp.created_at DESC
-            LIMIT $2
-        `, [userId, limit]);
+            LIMIT ${limit}
+        `);
 
         const data = result.rows.map(r => {
             let trend = 'stable';

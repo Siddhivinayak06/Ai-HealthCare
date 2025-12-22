@@ -1,4 +1,6 @@
-const db = require('../config/db');
+const { db } = require('../db');
+const { appointments, patients, users } = require('../db/schema');
+const { eq, and, gte, lte, asc, sql: drizzleSql } = require('drizzle-orm');
 
 // @desc    Get all appointments
 // @route   GET /api/appointments
@@ -8,40 +10,42 @@ const getAppointments = async (req, res) => {
         const userId = req.user.id;
         const { start, end } = req.query;
 
-        // Base query
-        let query = `
-            SELECT a.*, p.first_name, p.last_name 
-            FROM appointments a
-            LEFT JOIN patients p ON a.patient_id = p.id
-            WHERE 1=1
-        `;
-        const params = [];
+        let whereClause;
 
         if (req.user.role === 'patient') {
-            // Patients see appointments linked to their patient profile
-            query += ` AND a.patient_id = (SELECT id FROM patients WHERE user_id = $${params.length + 1})`;
-            params.push(userId);
+            const patientSubquery = db.select({ id: patients.id }).from(patients).where(eq(patients.userId, userId));
+            whereClause = eq(appointments.patientId, patientSubquery);
         } else {
-            // Doctors see appointments they created
-            query += ` AND a.user_id = $${params.length + 1}`;
-            params.push(userId);
+            whereClause = eq(appointments.userId, userId);
         }
 
-        // Filter by date range if provided
         if (start && end) {
-            query += ` AND a.start_time >= $2 AND a.end_time <= $3`;
-            params.push(start, end);
+            whereClause = and(
+                whereClause,
+                gte(appointments.startTime, new Date(start)),
+                lte(appointments.endTime, new Date(end))
+            );
         }
 
-        query += ` ORDER BY a.start_time ASC`;
+        const result = await db.select({
+            id: appointments.id,
+            userId: appointments.userId,
+            patientId: appointments.patientId,
+            title: appointments.title,
+            startTime: appointments.startTime,
+            endTime: appointments.endTime,
+            status: appointments.status,
+            type: appointments.type,
+            notes: appointments.notes,
+            firstName: patients.firstName,
+            lastName: patients.lastName
+        })
+            .from(appointments)
+            .leftJoin(patients, eq(appointments.patientId, patients.id))
+            .where(whereClause)
+            .orderBy(asc(appointments.startTime));
 
-        console.log('Get Appointments Query:', query);
-        console.log('Get Appointments Params:', params);
-
-        const result = await db.query(query, params);
-        console.log('Get Appointments Result Count:', result.rows.length);
-
-        res.json(result.rows);
+        res.json(result);
     } catch (error) {
         console.error('Error fetching appointments:', error);
         res.status(500).json({ message: 'Server Error' });
@@ -56,16 +60,14 @@ const createAppointment = async (req, res) => {
         const userId = req.user.id;
         const { patient_id, title, start_time, end_time, type, notes, doctor_id } = req.body;
 
-        let hostId = userId; // The user hosting/owning the appointment (Doctor)
+        let hostId = userId;
 
-        // If patient is booking, the host is the selected doctor
         if (req.user.role === 'patient') {
             if (!doctor_id) {
                 return res.status(400).json({ message: 'Please select a doctor' });
             }
-            // Verify doctor exists
-            const docCheck = await db.query('SELECT id FROM users WHERE id = $1 AND role = $2', [doctor_id, 'doctor']);
-            if (docCheck.rows.length === 0) {
+            const docCheck = await db.select({ id: users.id }).from(users).where(and(eq(users.id, doctor_id), eq(users.role, 'doctor')));
+            if (docCheck.length === 0) {
                 return res.status(404).json({ message: 'Selected doctor not found' });
             }
             hostId = doctor_id;
@@ -74,39 +76,41 @@ const createAppointment = async (req, res) => {
         let finalPatientId = patient_id;
 
         if (req.user.role === 'patient') {
-            const p = await db.query('SELECT id FROM patients WHERE user_id = $1', [userId]);
-            if (p.rows.length === 0) {
+            const p = await db.select({ id: patients.id }).from(patients).where(eq(patients.userId, userId));
+            if (p.length === 0) {
                 return res.status(404).json({ message: 'Patient profile not found. Please create one first.' });
             }
-            finalPatientId = p.rows[0].id;
+            finalPatientId = p[0].id;
         }
 
         if (!finalPatientId || !start_time || !end_time || !title) {
             return res.status(400).json({ message: 'Please provide all required fields' });
         }
 
-        // Check for conflicts for the HOST (Doctor)
-        const conflictQuery = `
-            SELECT * FROM appointments 
-            WHERE user_id = $1 
-            AND start_time < $2 
-            AND end_time > $3
-        `;
-        const conflictResult = await db.query(conflictQuery, [hostId, end_time, start_time]);
+        // Check for conflicts
+        const conflictResult = await db.select().from(appointments).where(
+            and(
+                eq(appointments.userId, hostId),
+                lte(appointments.startTime, new Date(end_time)),
+                gte(appointments.endTime, new Date(start_time))
+            )
+        );
 
-        if (conflictResult.rows.length > 0) {
+        if (conflictResult.length > 0) {
             return res.status(409).json({ message: 'This slot is not available' });
         }
 
-        const query = `
-            INSERT INTO appointments (user_id, patient_id, title, start_time, end_time, type, notes)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            RETURNING *
-        `;
-        const values = [hostId, finalPatientId, title, start_time, end_time, type || 'checkup', notes];
+        const result = await db.insert(appointments).values({
+            userId: hostId,
+            patientId: finalPatientId,
+            title,
+            startTime: new Date(start_time),
+            endTime: new Date(end_time),
+            type: type || 'checkup',
+            notes
+        }).returning();
 
-        const result = await db.query(query, values);
-        res.status(201).json(result.rows[0]);
+        res.status(201).json(result[0]);
     } catch (error) {
         console.error('Error creating appointment:', error);
         res.status(500).json({ message: 'Server Error' });
@@ -122,45 +126,37 @@ const updateAppointment = async (req, res) => {
         const userId = req.user.id;
         const { title, start_time, end_time, status, type, notes } = req.body;
 
-        // Check ownership
-        const check = await db.query('SELECT * FROM appointments WHERE id = $1 AND user_id = $2', [id, userId]);
-        if (check.rows.length === 0) {
+        const check = await db.select().from(appointments).where(and(eq(appointments.id, id), eq(appointments.userId, userId)));
+        if (check.length === 0) {
             return res.status(404).json({ message: 'Appointment not found' });
         }
 
-        // Check for conflicts (excluding current appointment)
         if (start_time && end_time) {
-            const conflictQuery = `
-                SELECT * FROM appointments 
-                WHERE user_id = $1 
-                AND id != $2
-                AND start_time < $3 
-                AND end_time > $4
-            `;
-            const conflictResult = await db.query(conflictQuery, [userId, id, end_time, start_time]);
+            const conflictResult = await db.select().from(appointments).where(
+                and(
+                    eq(appointments.userId, userId),
+                    drizzleSql`${appointments.id} != ${id}`,
+                    lte(appointments.startTime, new Date(end_time)),
+                    gte(appointments.endTime, new Date(start_time))
+                )
+            );
 
-            if (conflictResult.rows.length > 0) {
+            if (conflictResult.length > 0) {
                 return res.status(409).json({ message: 'Appointment slot conflicts with an existing appointment' });
             }
         }
 
-        const query = `
-            UPDATE appointments 
-            SET title = COALESCE($1, title),
-                start_time = COALESCE($2, start_time),
-                end_time = COALESCE($3, end_time),
-                status = COALESCE($4, status),
-                type = COALESCE($5, type),
-                notes = COALESCE($6, notes),
-                updated_at = NOW()
-            WHERE id = $7 AND user_id = $8
-            RETURNING *
-        `;
+        const result = await db.update(appointments).set({
+            title,
+            startTime: start_time ? new Date(start_time) : undefined,
+            endTime: end_time ? new Date(end_time) : undefined,
+            status,
+            type,
+            notes,
+            updatedAt: new Date()
+        }).where(and(eq(appointments.id, id), eq(appointments.userId, userId))).returning();
 
-        const values = [title, start_time, end_time, status, type, notes, id, userId];
-        const result = await db.query(query, values);
-
-        res.json(result.rows[0]);
+        res.json(result[0]);
     } catch (error) {
         console.error('Error updating appointment:', error);
         res.status(500).json({ message: 'Server Error' });
@@ -175,9 +171,9 @@ const deleteAppointment = async (req, res) => {
         const { id } = req.params;
         const userId = req.user.id;
 
-        const result = await db.query('DELETE FROM appointments WHERE id = $1 AND user_id = $2 RETURNING id', [id, userId]);
+        const result = await db.delete(appointments).where(and(eq(appointments.id, id), eq(appointments.userId, userId))).returning({ id: appointments.id });
 
-        if (result.rows.length === 0) {
+        if (result.length === 0) {
             return res.status(404).json({ message: 'Appointment not found' });
         }
 
