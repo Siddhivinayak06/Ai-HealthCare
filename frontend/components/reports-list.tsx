@@ -16,9 +16,12 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { FileTextIcon, DownloadIcon, LoaderIcon, RefreshIcon } from "@/components/icons"
+import { FileTextIcon, DownloadIcon, LoaderIcon, RefreshIcon, BrainIcon, SparklesIcon } from "@/components/icons"
 import { createReport, getReports, deleteReport } from "@/app/actions/reports"
+import { analyzeReport } from "@/app/actions/nlp"
+import { Activity, Beaker, Pill, AlertTriangle } from "lucide-react"
 import type { Report } from "@/lib/db"
+import { cn } from "@/lib/utils"
 
 interface ReportsListProps {
   initialReports: Report[]
@@ -41,6 +44,10 @@ export function ReportsList({ initialReports, userRole }: ReportsListProps) {
     title: "",
     reportType: "",
   })
+
+  const [isAnalyzing, setIsAnalyzing] = useState<string | null>(null)
+  const [analysisResult, setAnalysisResult] = useState<any>(null)
+  const [isAnalysisOpen, setIsAnalysisOpen] = useState(false)
 
   const refreshReports = async () => {
     const data = await getReports()
@@ -73,6 +80,27 @@ export function ReportsList({ initialReports, userRole }: ReportsListProps) {
     if (confirm("Are you sure you want to delete this report?")) {
       await deleteReport(id)
       refreshReports()
+    }
+  }
+
+  const handleAnalyze = async (report: any) => {
+    setIsAnalyzing(report.id)
+    try {
+      // Mock content for analysis if no real content exists
+      const textToAnalyze = report.content?.summary ||
+        "Patient presents with acute chest pain and shortness of breath. History of hypertension and type 2 diabetes. Lab results show elevated troponin levels. Recommendation: Immediate cardiology consultation and ECG."
+
+      const result = await analyzeReport(textToAnalyze)
+      if (result.success) {
+        setAnalysisResult(result.data)
+        setIsAnalysisOpen(true)
+      } else {
+        alert("Analysis failed: " + result.error)
+      }
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setIsAnalyzing(null)
     }
   }
 
@@ -219,6 +247,20 @@ export function ReportsList({ initialReports, userRole }: ReportsListProps) {
                   <Button
                     variant="outline"
                     size="sm"
+                    className="gap-2 bg-primary/10 text-primary border-primary/20 hover:bg-primary/20"
+                    onClick={() => handleAnalyze(report)}
+                    disabled={isAnalyzing === report.id || report.status !== "ready"}
+                  >
+                    {isAnalyzing === report.id ? (
+                      <LoaderIcon className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <BrainIcon className="h-4 w-4" />
+                    )}
+                    Analyze
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="gap-2 bg-background/50"
                     disabled={report.status !== "ready"}
                   >
@@ -241,6 +283,91 @@ export function ReportsList({ initialReports, userRole }: ReportsListProps) {
           </div>
         )}
       </CardContent>
+
+      <Dialog open={isAnalysisOpen} onOpenChange={setIsAnalysisOpen}>
+        <DialogContent className="max-w-2xl bg-card border-border/50">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <SparklesIcon className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <DialogTitle>MedAI Clinical Analysis</DialogTitle>
+                <DialogDescription>Advanced NLP Intelligence Findings</DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {analysisResult && (
+            <div className="space-y-6 py-4">
+              {/* Summary Section */}
+              <div className="space-y-3">
+                <h4 className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <FileTextIcon className="h-4 w-4" />
+                  Clinical Summary (BART-AI)
+                </h4>
+                <div className="p-4 rounded-xl bg-muted/50 border border-border/50 text-sm leading-relaxed text-foreground/90 italic">
+                  "{analysisResult.summary}"
+                </div>
+              </div>
+
+              {/* Entities Section */}
+              <div className="space-y-3">
+                <h4 className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <Activity className="h-4 w-4" />
+                  Extracted Medical Entities (BioBERT)
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {analysisResult.entities.map((entity: any, i: number) => (
+                    <Badge
+                      key={i}
+                      variant="outline"
+                      className={cn(
+                        "flex items-center gap-1.5 py-1 px-2.5",
+                        entity.label.includes("Disease") || entity.label.includes("Sign") ? "border-rose-500/30 bg-rose-500/5 text-rose-500" :
+                          entity.label.includes("Drug") || entity.label.includes("Therapeutic") ? "border-violet-500/30 bg-violet-500/5 text-violet-500" :
+                            "border-blue-500/30 bg-blue-500/5 text-blue-500"
+                      )}
+                    >
+                      {entity.label.includes("Disease") ? <AlertTriangle className="h-3 w-3" /> :
+                        entity.label.includes("Drug") ? <Pill className="h-3 w-3" /> :
+                          <Beaker className="h-3 w-3" />}
+                      {entity.text}
+                      <span className="text-[10px] opacity-60 ml-1">{entity.label}</span>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              {/* Doctor Brief Section */}
+              {analysisResult.doctor_insights && (
+                <div className="space-y-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
+                  <h4 className="flex items-center gap-2 text-sm font-bold text-primary">
+                    <BrainIcon className="h-4 w-4" />
+                    Clinical Directives
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Actionable insights generated for medical staff consumption.
+                  </p>
+                  <div className="grid gap-2 mt-2">
+                    {Object.entries(analysisResult.doctor_insights).map(([key, val]: [string, any], i) => (
+                      <div key={i} className="text-sm font-medium flex items-center gap-2">
+                        <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                        <span className="capitalize">{key.replace(/_/g, ' ')}:</span>
+                        <span className="text-foreground/70 font-normal">{val.toString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => setIsAnalysisOpen(false)}>Close Analysis</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

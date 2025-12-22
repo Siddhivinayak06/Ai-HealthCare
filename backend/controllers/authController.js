@@ -1,7 +1,9 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const db = require('../config/db');
+const { db } = require('../db');
+const { users } = require('../db/schema');
+const { eq } = require('drizzle-orm');
 const sendEmail = require('../utils/sendEmail');
 
 // Helper to generate JWT
@@ -23,8 +25,8 @@ const registerUser = async (req, res) => {
 
     try {
         // Check if user exists
-        const userCheck = await db.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
-        if (userCheck.rows.length > 0) {
+        const userCheck = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
+        if (userCheck.length > 0) {
             return res.status(400).json({ message: 'User already exists' });
         }
 
@@ -33,12 +35,19 @@ const registerUser = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
 
         // Create user
-        const result = await db.query(
-            'INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role',
-            [email.toLowerCase(), hashedPassword, name, role || 'patient']
-        );
+        const result = await db.insert(users).values({
+            email: email.toLowerCase(),
+            passwordHash: hashedPassword,
+            name,
+            role: role || 'patient'
+        }).returning({
+            id: users.id,
+            email: users.email,
+            name: users.name,
+            role: users.role
+        });
 
-        const user = result.rows[0];
+        const user = result[0];
 
         res.status(201).json({
             id: user.id,
@@ -60,17 +69,17 @@ const loginUser = async (req, res) => {
     const { email, password } = req.body;
 
     try {
-        const result = await db.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+        const result = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
 
-        if (result.rows.length === 0) {
+        if (result.length === 0) {
             console.log(`Login failed: User not found for email ${email}`);
             return res.status(400).json({ message: 'Invalid credentials' });
         }
 
-        const user = result.rows[0];
+        const user = result[0];
 
         // Check password
-        if (user && (await bcrypt.compare(password, user.password_hash))) {
+        if (user && (await bcrypt.compare(password, user.passwordHash))) {
             res.json({
                 id: user.id,
                 email: user.email,
@@ -94,8 +103,16 @@ const loginUser = async (req, res) => {
 const getMe = async (req, res) => {
     try {
         // req.user is set by auth middleware
-        const result = await db.query('SELECT id, email, name, role, created_at, updated_at FROM users WHERE id = $1', [req.user.id]);
-        res.status(200).json(result.rows[0]);
+        const result = await db.select({
+            id: users.id,
+            email: users.email,
+            name: users.name,
+            role: users.role,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt
+        }).from(users).where(eq(users.id, req.user.id));
+
+        res.status(200).json(result[0]);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server error' });
@@ -109,26 +126,34 @@ const updateProfile = async (req, res) => {
     const { name, email } = req.body;
 
     try {
-        const user = await db.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+        const userResult = await db.select().from(users).where(eq(users.id, req.user.id));
 
-        if (user.rows.length === 0) {
+        if (userResult.length === 0) {
             return res.status(404).json({ message: 'User not found' });
         }
 
+        const user = userResult[0];
+
         // Check if email is being updated and if it's already taken
-        if (email && email !== user.rows[0].email) {
-            const emailCheck = await db.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
-            if (emailCheck.rows.length > 0) {
+        if (email && email !== user.email) {
+            const emailCheck = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
+            if (emailCheck.length > 0) {
                 return res.status(400).json({ message: 'Email already in use' });
             }
         }
 
-        const updatedUser = await db.query(
-            'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), updated_at = NOW() WHERE id = $3 RETURNING id, email, name, role',
-            [name, email ? email.toLowerCase() : null, req.user.id]
-        );
+        const updatedUser = await db.update(users).set({
+            name: name || user.name,
+            email: email ? email.toLowerCase() : user.email,
+            updatedAt: new Date()
+        }).where(eq(users.id, req.user.id)).returning({
+            id: users.id,
+            email: users.email,
+            name: users.name,
+            role: users.role
+        });
 
-        res.json(updatedUser.rows[0]);
+        res.json(updatedUser[0]);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server error' });
@@ -142,15 +167,15 @@ const changePassword = async (req, res) => {
     const { currentPassword, newPassword } = req.body;
 
     try {
-        const userResult = await db.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
-        const user = userResult.rows[0];
+        const userResult = await db.select().from(users).where(eq(users.id, req.user.id));
+        const user = userResult[0];
 
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
 
         // Check current password
-        const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+        const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
         if (!isMatch) {
             return res.status(400).json({ message: 'Current password is incorrect' });
         }
@@ -159,7 +184,10 @@ const changePassword = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(newPassword, salt);
 
-        await db.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hashedPassword, req.user.id]);
+        await db.update(users).set({
+            passwordHash: hashedPassword,
+            updatedAt: new Date()
+        }).where(eq(users.id, req.user.id));
 
         res.json({ message: 'Password updated successfully' });
     } catch (error) {
@@ -175,8 +203,8 @@ const forgotPassword = async (req, res) => {
     const { email } = req.body;
 
     try {
-        const userResult = await db.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
-        const user = userResult.rows[0];
+        const userResult = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
+        const user = userResult[0];
 
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
@@ -186,19 +214,18 @@ const forgotPassword = async (req, res) => {
         const resetToken = crypto.randomBytes(20).toString('hex');
 
         // Hash token and set to reset_password_token field
-        const resetPasswordToken = crypto
+        const resetPasswordTokenToken = crypto
             .createHash('sha256')
             .update(resetToken)
             .digest('hex');
 
         // Set expire (10 minutes)
-        // PostgreSQL interval syntax or calculate date in JS
         const resetPasswordExpire = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
-        await db.query(
-            'UPDATE users SET reset_password_token = $1, reset_password_expires = $2 WHERE id = $3',
-            [resetPasswordToken, resetPasswordExpire, user.id]
-        );
+        await db.update(users).set({
+            resetPasswordToken: resetPasswordTokenToken,
+            resetPasswordExpires: resetPasswordExpire
+        }).where(eq(users.id, user.id));
 
         // Create reset URL
         const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
@@ -217,10 +244,10 @@ const forgotPassword = async (req, res) => {
         } catch (err) {
             console.error(err);
             // Clear fields if email fails
-            await db.query(
-                'UPDATE users SET reset_password_token = NULL, reset_password_expires = NULL WHERE id = $1',
-                [user.id]
-            );
+            await db.update(users).set({
+                resetPasswordToken: null,
+                resetPasswordExpires: null
+            }).where(eq(users.id, user.id));
             return res.status(500).json({ message: 'Email could not be sent' });
         }
 
@@ -241,31 +268,30 @@ const resetPassword = async (req, res) => {
     }
 
     // Get hashed token
-    const resetPasswordToken = crypto
+    const resetPasswordTokenToken = crypto
         .createHash('sha256')
         .update(token)
         .digest('hex');
 
     try {
-        const userResult = await db.query(
-            'SELECT * FROM users WHERE reset_password_token = $1 AND reset_password_expires > $2',
-            [resetPasswordToken, new Date()] // Check if now is before expires
-        );
+        const userResult = await db.select().from(users).where(eq(users.resetPasswordToken, resetPasswordTokenToken));
 
-        const user = userResult.rows[0];
+        const user = userResult[0];
 
-        if (!user) {
-            return res.status(400).json({ message: 'Invalid token' });
+        if (!user || user.resetPasswordExpires < new Date()) {
+            return res.status(400).json({ message: 'Invalid or expired token' });
         }
 
         // Set new password
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        await db.query(
-            'UPDATE users SET password_hash = $1, reset_password_token = NULL, reset_password_expires = NULL WHERE id = $2',
-            [hashedPassword, user.id]
-        );
+        await db.update(users).set({
+            passwordHash: hashedPassword,
+            resetPasswordToken: null,
+            resetPasswordExpires: null,
+            updatedAt: new Date()
+        }).where(eq(users.id, user.id));
 
         res.status(200).json({ success: true, data: 'Password updated' });
 
@@ -280,8 +306,13 @@ const resetPassword = async (req, res) => {
 // @access  Private
 const getDoctors = async (req, res) => {
     try {
-        const result = await db.query('SELECT id, name, email FROM users WHERE role = $1', ['doctor']);
-        res.status(200).json(result.rows);
+        const result = await db.select({
+            id: users.id,
+            name: users.name,
+            email: users.email
+        }).from(users).where(eq(users.role, 'doctor'));
+
+        res.status(200).json(result);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server error' });

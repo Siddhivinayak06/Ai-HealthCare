@@ -1,4 +1,6 @@
-const db = require('../config/db');
+const { db } = require('../db');
+const { prescriptions, users, patients } = require('../db/schema');
+const { eq, desc } = require('drizzle-orm');
 
 // Create a new prescription
 exports.createPrescription = async (req, res) => {
@@ -10,20 +12,19 @@ exports.createPrescription = async (req, res) => {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        const query = `
-            INSERT INTO prescriptions 
-            (patient_id, doctor_id, medication_name, dosage, frequency, duration, notes) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            RETURNING id
-        `;
-
-        const { rows } = await db.query(query, [
-            patientId, doctorId, medicationName, dosage, frequency, duration, notes || null
-        ]);
+        const result = await db.insert(prescriptions).values({
+            patientId,
+            doctorId,
+            medicationName,
+            dosage,
+            frequency,
+            duration,
+            notes: notes || null
+        }).returning({ id: prescriptions.id });
 
         res.status(201).json({
             message: 'Prescription created successfully',
-            prescriptionId: rows[0].id
+            prescriptionId: result[0].id
         });
     } catch (error) {
         console.error('Error creating prescription:', error);
@@ -36,16 +37,24 @@ exports.getPatientPrescriptions = async (req, res) => {
     try {
         const { patientId } = req.params;
 
-        const query = `
-            SELECT p.*, u.name as doctor_name 
-            FROM prescriptions p
-            JOIN users u ON p.doctor_id = u.id
-            WHERE p.patient_id = $1
-            ORDER BY p.created_at DESC
-        `;
+        const result = await db.select({
+            id: prescriptions.id,
+            patientId: prescriptions.patientId,
+            doctorId: prescriptions.doctorId,
+            medicationName: prescriptions.medicationName,
+            dosage: prescriptions.dosage,
+            frequency: prescriptions.frequency,
+            duration: prescriptions.duration,
+            notes: prescriptions.notes,
+            createdAt: prescriptions.createdAt,
+            doctor_name: users.name
+        })
+            .from(prescriptions)
+            .join(users, eq(prescriptions.doctorId, users.id))
+            .where(eq(prescriptions.patientId, patientId))
+            .orderBy(desc(prescriptions.createdAt));
 
-        const { rows } = await db.query(query, [patientId]);
-        res.status(200).json(rows);
+        res.status(200).json(result);
     } catch (error) {
         console.error('Error fetching patient prescriptions:', error);
         res.status(500).json({ error: 'Failed to fetch prescriptions' });
@@ -57,16 +66,24 @@ exports.getDoctorPrescriptions = async (req, res) => {
     try {
         const doctorId = req.user.id;
 
-        const query = `
-            SELECT p.*, pat.name as patient_name 
-            FROM prescriptions p
-            JOIN patients pat ON p.patient_id = pat.id
-            WHERE p.doctor_id = $1
-            ORDER BY p.created_at DESC
-        `;
+        const result = await db.select({
+            id: prescriptions.id,
+            patientId: prescriptions.patientId,
+            doctorId: prescriptions.doctorId,
+            medicationName: prescriptions.medicationName,
+            dosage: prescriptions.dosage,
+            frequency: prescriptions.frequency,
+            duration: prescriptions.duration,
+            notes: prescriptions.notes,
+            createdAt: prescriptions.createdAt,
+            patient_name: patients.firstName // Using firstName as a fallback for name
+        })
+            .from(prescriptions)
+            .join(patients, eq(prescriptions.patientId, patients.id))
+            .where(eq(prescriptions.doctorId, doctorId))
+            .orderBy(desc(prescriptions.createdAt));
 
-        const { rows } = await db.query(query, [doctorId]);
-        res.status(200).json(rows);
+        res.status(200).json(result);
     } catch (error) {
         console.error('Error fetching doctor prescriptions:', error);
         res.status(500).json({ error: 'Failed to fetch prescriptions' });

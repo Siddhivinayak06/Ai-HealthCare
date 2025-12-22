@@ -16,6 +16,7 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.1",
     "express": "^4.21.2",
     "form-data": "^4.0.5",
     "jsonwebtoken": "^9.0.3",
@@ -24,6 +25,8 @@
     "pg": "^8.16.3"
   },
   "devDependencies": {
+    "@types/pg": "^8.16.0",
+    "drizzle-kit": "^0.31.8",
     "nodemon": "^3.1.9"
   }
 }

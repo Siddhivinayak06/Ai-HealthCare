@@ -1,9 +1,8 @@
-const db = require('../config/db');
+const { db } = require('../db');
+const { reports, patients, users } = require('../db/schema');
+const { eq, and, desc } = require('drizzle-orm');
 const { logActivityInternal } = require('./activityController');
 
-// @desc    Get all reports
-// @route   GET /api/reports
-// @access  Private
 // @desc    Get all reports
 // @route   GET /api/reports
 // @access  Private
@@ -13,33 +12,54 @@ const getReports = async (req, res) => {
 
         if (req.user.role === 'patient') {
             // Find patient record first
-            const patientCheck = await db.query('SELECT id FROM patients WHERE user_id = $1', [req.user.id]);
-            if (patientCheck.rows.length === 0) {
+            const patientCheck = await db.select({ id: patients.id }).from(patients).where(eq(patients.userId, req.user.id));
+            if (patientCheck.length === 0) {
                 return res.json([]); // No patient profile, no reports
             }
-            const patientId = patientCheck.rows[0].id;
+            const patientId = patientCheck[0].id;
 
             // Get reports assigned to this patient
-            result = await db.query(`
-                SELECT r.*, p.first_name, p.last_name, u.name as doctor_name
-                FROM reports r
-                LEFT JOIN patients p ON r.patient_id = p.id
-                LEFT JOIN users u ON r.user_id = u.id
-                WHERE r.patient_id = $1
-                ORDER BY r.created_at DESC
-            `, [patientId]);
+            result = await db.select({
+                id: reports.id,
+                userId: reports.userId,
+                patientId: reports.patientId,
+                title: reports.title,
+                reportType: reports.reportType,
+                content: reports.content,
+                fileSize: reports.fileSize,
+                status: reports.status,
+                createdAt: reports.createdAt,
+                firstName: patients.firstName,
+                lastName: patients.lastName,
+                doctorName: users.name
+            })
+                .from(reports)
+                .leftJoin(patients, eq(reports.patientId, patients.id))
+                .leftJoin(users, eq(reports.userId, users.id))
+                .where(eq(reports.patientId, patientId))
+                .orderBy(desc(reports.createdAt));
         } else {
             // Doctors see reports they created
-            result = await db.query(`
-                SELECT r.*, p.first_name, p.last_name
-                FROM reports r
-                LEFT JOIN patients p ON r.patient_id = p.id
-                WHERE r.user_id = $1
-                ORDER BY r.created_at DESC
-            `, [req.user.id]);
+            result = await db.select({
+                id: reports.id,
+                userId: reports.userId,
+                patientId: reports.patientId,
+                title: reports.title,
+                reportType: reports.reportType,
+                content: reports.content,
+                fileSize: reports.fileSize,
+                status: reports.status,
+                createdAt: reports.createdAt,
+                firstName: patients.firstName,
+                lastName: patients.lastName
+            })
+                .from(reports)
+                .leftJoin(patients, eq(reports.patientId, patients.id))
+                .where(eq(reports.userId, req.user.id))
+                .orderBy(desc(reports.createdAt));
         }
 
-        res.json(result.rows);
+        res.json(result);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server error' });
@@ -62,19 +82,25 @@ const createReport = async (req, res) => {
             ? `${(contentSize / (1024 * 1024)).toFixed(1)} MB`
             : `${(contentSize / 1024).toFixed(0)} KB`;
 
-        const result = await db.query(
-            `INSERT INTO reports (user_id, patient_id, title, report_type, content, file_size, status)
-             VALUES ($1, $2, $3, $4, $5, $6, 'ready') RETURNING *`,
-            [req.user.id, patientId || null, title, reportType, JSON.stringify(content), fileSize]
-        );
+        const result = await db.insert(reports).values({
+            userId: req.user.id,
+            patientId: patientId || null,
+            title,
+            reportType,
+            content,
+            fileSize,
+            status: 'ready'
+        }).returning();
+
+        const newReport = result[0];
 
         await logActivityInternal(req.user.id, "Report generated", "report", {
-            reportId: result.rows[0].id,
+            reportId: newReport.id,
             reportType,
             title
         });
 
-        res.status(201).json(result.rows[0]);
+        res.status(201).json(newReport);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server error' });
@@ -90,9 +116,14 @@ const deleteReport = async (req, res) => {
     }
 
     try {
-        const result = await db.query('DELETE FROM reports WHERE id = $1 AND user_id = $2 RETURNING id', [req.params.id, req.user.id]);
+        const result = await db.delete(reports).where(
+            and(
+                eq(reports.id, req.params.id),
+                eq(reports.userId, req.user.id)
+            )
+        ).returning({ id: reports.id });
 
-        if (result.rows.length === 0) {
+        if (result.length === 0) {
             return res.status(404).json({ message: 'Report not found' });
         }
 

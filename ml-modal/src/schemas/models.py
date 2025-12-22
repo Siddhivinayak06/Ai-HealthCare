@@ -31,3 +31,18 @@ class DiagnosisResponse(BaseModel):
     explanation_text: Optional[str] = None
     modality_debug: Optional[Dict] = None
     auto_corrected: bool = False
+
+class NLPRequest(BaseModel):
+    text: Optional[str] = None
+    file_path: Optional[str] = None
+
+class NLPEntity(BaseModel):
+    text: str
+    label: str
+    confidence: float
+
+class NLPResponse(BaseModel):
+    summary: str
+    entities: List[NLPEntity]
+    doctor_insights: Optional[Dict] = None
+    processing_time: float

@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 import time
 from src.config import DATA_DIR, DEVICE
 from src.core.state import MODELS
-from src.api import diagnostics, risk, training
+from src.api import diagnostics, risk, training, nlp
 
 app = FastAPI(
     title="MedAI Diagnostics API",
@@ -18,6 +18,7 @@ app.mount("/outputs", StaticFiles(directory=DATA_DIR), name="outputs")
 app.include_router(diagnostics.router)
 app.include_router(risk.router)
 app.include_router(training.router)
+app.include_router(nlp.router)
 
 @app.api_route("/", methods=["GET", "HEAD"])
 def read_root():
