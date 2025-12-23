@@ -4,13 +4,13 @@ import { pgTable, text, timestamp, uuid, integer, boolean, jsonb, decimal, varch
 export const users = pgTable('users', {
     id: uuid('id').defaultRandom().primaryKey(),
     email: text('email').notNull().unique(),
-    passwordHash: text('password_hash').notNull(),
     name: text('name'),
-    role: varchar('role', { length: 20 }).default('patient'),
-    resetPasswordToken: text('reset_password_token'),
-    resetPasswordExpires: timestamp('reset_password_expires'),
+    role: varchar('role', { length: 20 }).default('patient'), // 'doctor' | 'patient'
+    passwordHash: text('password_hash').notNull(),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
+    resetPasswordToken: text('reset_password_token'),
+    resetPasswordExpires: timestamp('reset_password_expires'),
 });
 
 // Patients Table
@@ -19,8 +19,10 @@ export const patients = pgTable('patients', {
     userId: uuid('user_id').references(() => users.id).notNull(),
     firstName: text('first_name').notNull(),
     lastName: text('last_name').notNull(),
+    age: integer('age'),
+    gender: varchar('gender', { length: 20 }),
+    medicalHistory: jsonb('medical_history'),
     dateOfBirth: timestamp('date_of_birth'),
-    gender: varchar('gender', { length: 10 }),
     email: text('email'),
     phone: varchar('phone', { length: 20 }),
     address: text('address'),
@@ -60,8 +62,11 @@ export const healthRecords = pgTable('health_records', {
 // Reports Table
 export const reports = pgTable('reports', {
     id: uuid('id').defaultRandom().primaryKey(),
-    userId: uuid('user_id').references(() => users.id).notNull(),
     patientId: uuid('patient_id').references(() => patients.id),
+    userId: uuid('user_id').references(() => users.id).notNull(), // Link to the user who created it/owns it
+    rawText: text('raw_text'),
+    extractedEntities: jsonb('extracted_entities'),
+    summary: text('summary'),
     title: text('title').notNull(),
     reportType: text('report_type').notNull(),
     content: jsonb('content'),
@@ -100,7 +105,29 @@ export const prescriptions = pgTable('prescriptions', {
     updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-// Image Analyses Table
+// Medical Scans Table [Replacing/Complementing Image Analyses]
+export const scans = pgTable('scans', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    patientId: uuid('patient_id').references(() => patients.id).notNull(),
+    scanType: varchar('scan_type', { length: 20 }).notNull(), // 'xray' | 'ct' | 'mri'
+    imageUrl: text('image_url').notNull(),
+    uploadedBy: uuid('uploaded_by').references(() => users.id).notNull(),
+    createdAt: timestamp('created_at').defaultNow(),
+});
+
+// AI Diagnoses Table
+export const diagnoses = pgTable('diagnoses', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    scanId: uuid('scan_id').references(() => scans.id).notNull(),
+    predictedCondition: text('predicted_condition').notNull(),
+    confidenceScore: decimal('confidence_score', { precision: 4, scale: 3 }),
+    riskLevel: varchar('risk_level', { length: 20 }), // 'Low' | 'Moderate' | 'High' | 'Critical'
+    explanation: jsonb('explanation'),
+    modelVersion: text('model_version'),
+    createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Image Analyses Table (Legacy, keeping for compatibility during migration if needed)
 export const imageAnalyses = pgTable('image_analyses', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id).notNull(),
@@ -117,7 +144,7 @@ export const imageAnalyses = pgTable('image_analyses', {
     createdAt: timestamp('created_at').defaultNow(),
 });
 
-// Risk Predictions Table
+// Risk Predictions Table (Legacy)
 export const riskPredictions = pgTable('risk_predictions', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id).notNull(),
@@ -129,6 +156,16 @@ export const riskPredictions = pgTable('risk_predictions', {
     contributingFactors: text('contributing_factors'),
     recommendations: text('recommendations'),
     modelVersion: text('model_version'),
+    createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Doctor Feedback Table
+export const feedback = pgTable('feedback', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    diagnosisId: uuid('diagnosis_id').references(() => diagnoses.id).notNull(),
+    doctorId: uuid('doctor_id').references(() => users.id).notNull(),
+    approved: boolean('approved').notNull(),
+    overrideReason: text('override_reason'),
     createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -172,12 +209,14 @@ export const auditLogs = pgTable('audit_logs', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id),
     action: text('action').notNull(), // e.g. "PREDICTION", "OVERRIDE", "MODEL_UPDATE"
+    modelVersion: text('model_version'),
+    confidence: decimal('confidence', { precision: 4, scale: 3 }),
     entityType: varchar('entity_type', { length: 50 }), // e.g. "IMAGE_ANALYSIS", "RISK_PREDICTION"
     entityId: uuid('entity_id'),
-    findings: jsonb('findings'), // What AI found
-    confidenceScore: decimal('confidence_score', { precision: 4, scale: 3 }),
+    findings: jsonb('findings'),
     doctorOverride: boolean('doctor_override').default(false),
     overrideReason: text('override_reason'),
     feedback: text('feedback'),
     createdAt: timestamp('created_at').defaultNow(),
+    timestamp: timestamp('timestamp').defaultNow(),
 });

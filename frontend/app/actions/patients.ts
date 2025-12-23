@@ -73,6 +73,8 @@ export async function createPatient(data: {
   bloodType?: string
   allergies?: string[] | string
   medicalConditions?: string[] | string
+  age?: number
+  medicalHistory?: any
 }): Promise<{ success: boolean; error?: string; patient?: Patient }> {
   try {
     const user = await requireUser()
@@ -110,6 +112,8 @@ export async function createPatient(data: {
         bloodType: data.bloodType,
         allergies: allergiesStr,
         medicalConditions: conditionsStr,
+        age: data.age,
+        medicalHistory: data.medicalHistory,
       })
       .returning()
 
@@ -144,6 +148,8 @@ export async function updatePatient(
     bloodType: string
     allergies: string[] | string
     medicalConditions: string[] | string
+    age: number
+    medicalHistory: any
   }>,
 ): Promise<{ success: boolean; error?: string }> {
   try {

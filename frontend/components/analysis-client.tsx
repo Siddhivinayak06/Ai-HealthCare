@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Upload, Loader2, AlertCircle, CheckCircle2, Scan, Sparkles, Brain, X, ImageIcon, Stethoscope, Activity, FileWarning } from "lucide-react"
+import { Upload, Loader2, AlertCircle, CheckCircle2, Scan, Sparkles, Brain, X, ImageIcon, Stethoscope, Activity, FileWarning, Clock } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -12,6 +12,8 @@ import { HeatmapViewer } from "@/components/explainability/heatmap-viewer"
 import { ConfidenceBadge } from "@/components/explainability/confidence-badge"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { submitFeedback, getLatestScanForPatient } from "@/app/actions/analyses"
+import { toast } from "sonner"
 
 interface AnalysisClientProps {
     userRole: string
@@ -32,6 +34,8 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
     const [isDragging, setIsDragging] = useState(false)
     const [scanType, setScanType] = useState("xray")
     const [explain, setExplain] = useState(true)
+    const [previousScan, setPreviousScan] = useState<any>(null)
+    const [isBatch, setIsBatch] = useState(false)
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -40,6 +44,7 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
             setPreview(URL.createObjectURL(selectedFile))
             setResult(null)
             setError(null)
+            setIsBatch(selectedFile.name.endsWith(".zip"))
         }
     }
 
@@ -48,11 +53,12 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
         setIsDragging(false)
         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
             const selectedFile = e.dataTransfer.files[0]
-            if (selectedFile.type.startsWith("image/")) {
+            if (selectedFile.type.startsWith("image/") || selectedFile.name.endsWith(".zip")) {
                 setFile(selectedFile)
-                setPreview(URL.createObjectURL(selectedFile))
+                setPreview(selectedFile.name.endsWith(".zip") ? null : URL.createObjectURL(selectedFile))
                 setResult(null)
                 setError(null)
+                setIsBatch(selectedFile.name.endsWith(".zip"))
             }
         }
     }
@@ -60,6 +66,16 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
     const [selectedPatientId, setSelectedPatientId] = useState<string>("")
     const [saving, setSaving] = useState(false)
     const [saveMessage, setSaveMessage] = useState("")
+
+    const handlePatientChange = async (id: string) => {
+        setSelectedPatientId(id)
+        if (id) {
+            const lastScan = await getLatestScanForPatient(id)
+            setPreviousScan(lastScan)
+        } else {
+            setPreviousScan(null)
+        }
+    }
 
     const handleSave = async () => {
         if (!selectedPatientId || !result) return
@@ -103,6 +119,11 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
         formData.append("file", file)
         formData.append("scan_type", scanType)
         formData.append("explain", explain.toString())
+        formData.append("is_batch", isBatch.toString())
+
+        if (selectedPatientId) {
+            formData.append("patientId", selectedPatientId)
+        }
 
         try {
             const res = await fetch("/api/predict/image", {
@@ -157,6 +178,7 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
         if (!result?.id) return
 
         try {
+            // 1. Notify ML Service for retraining
             const res = await fetch("/api/predict/feedback", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -167,11 +189,24 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                     correct_label: correctLabel
                 })
             })
+
+            // 2. Log to Audit Table
+            await submitFeedback({
+                entityId: result.id,
+                entityType: "IMAGE_ANALYSIS",
+                action: correctLabel === result.prediction ? "APPROVE" : "OVERRIDE",
+                feedback: `Clinician corrected AI prediction from ${result.prediction} to ${correctLabel}`,
+                findings: result.findings,
+                confidenceScore: result.confidence * 100
+            })
+
             if (res.ok) {
                 setFeedbackSent(true)
+                toast.success("Feedback recorded and shared with model")
             }
         } catch (e) {
             console.error("Feedback failed", e)
+            toast.error("Failed to record feedback")
         }
     }
 
@@ -299,7 +334,7 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                     </CardHeader>
 
                     <CardContent className="p-6 space-y-4">
-                        {!preview ? (
+                        {(!preview && !isBatch) ? (
                             <div
                                 className={cn(
                                     "relative border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center gap-4 text-center cursor-pointer min-h-[280px] transition-all duration-300",
@@ -330,11 +365,23 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                             </div>
                         ) : (
                             <div className="relative group rounded-2xl overflow-hidden border border-border/50 min-h-[280px] bg-secondary/20 flex items-center justify-center">
-                                <img
-                                    src={preview}
-                                    alt="Preview"
-                                    className="max-h-[280px] w-full object-contain transition-transform duration-300 group-hover:scale-[1.02]"
-                                />
+                                {isBatch ? (
+                                    <div className="text-center space-y-4 p-8">
+                                        <div className="h-20 w-20 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto border border-primary/20">
+                                            <FileWarning className="h-10 w-10 text-primary" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="font-bold">{file?.name}</p>
+                                            <p className="text-sm text-muted-foreground">Ready for batch neural analysis</p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <img
+                                        src={preview || ""}
+                                        alt="Preview"
+                                        className="max-h-[280px] w-full object-contain transition-transform duration-300 group-hover:scale-[1.02]"
+                                    />
+                                )}
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                                 <Button
                                     variant="destructive"
@@ -346,6 +393,7 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                         setPreview(null)
                                         setResult(null)
                                         setFeedbackSent(false)
+                                        setIsBatch(false)
                                     }}
                                 >
                                     <X className="h-4 w-4" />
@@ -361,7 +409,7 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
 
                         <input
                             type="file"
-                            accept="image/*"
+                            accept="image/*,.zip"
                             className="hidden"
                             id="file-upload"
                             onChange={handleFileChange}
@@ -636,7 +684,7 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                             <p className="text-sm font-medium">Save to Patient Record</p>
                                             <div className="flex gap-2">
                                                 <div className="flex-1">
-                                                    <PatientSelector onSelect={setSelectedPatientId} />
+                                                    <PatientSelector onSelect={handlePatientChange} />
                                                 </div>
                                                 <Button
                                                     onClick={handleSave}
@@ -652,6 +700,39 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                                 {saveMessage}
                                             </p>
                                         )}
+                                    </div>
+                                )}
+
+                                {/* Historical Comparison View */}
+                                {previousScan && (
+                                    <div className="p-4 rounded-xl bg-violet-500/5 border border-violet-500/10 space-y-4">
+                                        <h4 className="text-sm font-bold flex items-center gap-2 text-violet-400">
+                                            <Clock className="h-4 w-4" />
+                                            Historical Comparison
+                                        </h4>
+                                        <div className="flex gap-4 items-start">
+                                            <div className="w-24 h-24 rounded-lg overflow-hidden border border-border shrink-0 bg-background/50">
+                                                <img
+                                                    src={previousScan.imageUrl}
+                                                    alt="Previous scan"
+                                                    className="w-full h-full object-cover grayscale"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-xs font-semibold">{previousScan.diagnosis}</p>
+                                                <p className="text-[10px] text-muted-foreground">
+                                                    Analyzed on {new Date(previousScan.createdAt).toLocaleDateString()}
+                                                </p>
+                                                <Badge variant="outline" className={cn("text-[9px] py-0 h-4", getSeverityColor(previousScan.severity))}>
+                                                    {previousScan.severity}
+                                                </Badge>
+                                                <p className="text-[10px] text-muted-foreground pt-1 italic max-w-[200px]">
+                                                    {previousScan.diagnosis === result?.prediction
+                                                        ? "Condition appears consistent with previous findings."
+                                                        : "Note: AI prediction has changed since last visit."}
+                                                </p>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
