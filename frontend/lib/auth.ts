@@ -2,70 +2,14 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
-const secretKey = "secret";
-const key = new TextEncoder().encode(process.env.JWT_SECRET || secretKey);
-
-export async function encrypt(payload: any) {
-  return await new SignJWT(payload)
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("2h")
-    .sign(key);
+// ==================== SECURITY: Fail-fast if no secret ====================
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET environment variable is required for security");
 }
+const key = new TextEncoder().encode(process.env.JWT_SECRET);
 
-export async function decrypt(input: string): Promise<any> {
-  const { payload } = await jwtVerify(input, key, {
-    algorithms: ["HS256"],
-  });
-  return payload;
-}
-
-export async function login(user: { id: string; email: string; role: string }) {
-  // Create the session
-  const expires = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours
-  const session = await encrypt({ ...user, expires });
-
-  // Save the session in a cookie
-  const cookieStore = await cookies();
-  cookieStore.set("auth_token", session, {
-    expires,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/"
-  });
-}
-
-export async function logout() {
-  // Destroy the session
-  const cookieStore = await cookies();
-  cookieStore.set("auth_token", "", { expires: new Date(0), path: "/" });
-}
-
-export async function getSession() {
-  const cookieStore = await cookies();
-  const session = cookieStore.get("auth_token")?.value;
-  if (!session) return null;
-  return await decrypt(session);
-}
-
-export async function updateSession(request: NextRequest) {
-  const session = request.cookies.get("auth_token")?.value;
-  if (!session) return;
-
-  // Refresh the session so it doesn't expire
-  const parsed = await decrypt(session);
-  parsed.expires = new Date(Date.now() + 2 * 60 * 60 * 1000);
-  const res = NextResponse.next();
-  res.cookies.set({
-    name: "auth_token",
-    value: await encrypt(parsed),
-    httpOnly: true,
-    expires: parsed.expires,
-    path: "/"
-  });
-  return res;
-}
+// Session configuration
+const SESSION_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 // Session user type
 export interface SessionUser {
@@ -74,33 +18,137 @@ export interface SessionUser {
   role: string;
 }
 
+interface SessionPayload extends SessionUser {
+  expires: string;
+  iat: number;
+  exp: number;
+}
+
+/**
+ * Encrypt a payload into a signed JWT
+ */
+export async function encrypt(payload: Record<string, unknown>) {
+  return await new SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("2h")
+    .sign(key);
+}
+
+/**
+ * Decrypt and verify a JWT token
+ */
+export async function decrypt(input: string): Promise<SessionPayload> {
+  const { payload } = await jwtVerify(input, key, {
+    algorithms: ["HS256"],
+  });
+  return payload as unknown as SessionPayload;
+}
+
+/**
+ * Create a session and set the auth cookie
+ */
+export async function login(user: SessionUser) {
+  const expires = new Date(Date.now() + SESSION_DURATION_MS);
+  const session = await encrypt({ ...user, expires: expires.toISOString() });
+
+  const cookieStore = await cookies();
+  cookieStore.set("auth_token", session, {
+    expires,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+  });
+}
+
+/**
+ * Destroy the session by clearing the auth cookie
+ */
+export async function logout() {
+  const cookieStore = await cookies();
+  cookieStore.set("auth_token", "", { expires: new Date(0), path: "/" });
+}
+
+/**
+ * Get the current session, returns null if expired or invalid
+ */
+export async function getSession(): Promise<SessionPayload | null> {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("auth_token")?.value;
+  if (!session) return null;
+
+  try {
+    const parsed = await decrypt(session);
+
+    // Check if session is expired (defense in depth)
+    if (parsed.expires && new Date(parsed.expires) < new Date()) {
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    // Token invalid or expired
+    return null;
+  }
+}
+
+/**
+ * Update session expiration (sliding window)
+ */
+export async function updateSession(request: NextRequest) {
+  const session = request.cookies.get("auth_token")?.value;
+  if (!session) return NextResponse.next();
+
+  try {
+    const parsed = await decrypt(session);
+    const newExpires = new Date(Date.now() + SESSION_DURATION_MS);
+
+    const res = NextResponse.next();
+    res.cookies.set({
+      name: "auth_token",
+      value: await encrypt({
+        id: parsed.id,
+        email: parsed.email,
+        role: parsed.role,
+        expires: newExpires.toISOString()
+      }),
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      expires: newExpires,
+      path: "/",
+    });
+    return res;
+  } catch {
+    // If token is invalid, just continue without updating
+    return NextResponse.next();
+  }
+}
+
 /**
  * Require authentication for API Route Handlers.
  * Throws an error if user is not authenticated.
- * @returns The authenticated user's session data
  */
 export async function requireAuth(): Promise<SessionUser> {
   const session = await getSession();
   if (!session) {
-    throw new Error('Unauthorized');
+    throw new Error("Unauthorized");
   }
   return {
-    id: session.id as string,
-    email: session.email as string,
-    role: session.role as string
+    id: session.id,
+    email: session.email,
+    role: session.role,
   };
 }
 
 /**
  * Require specific role(s) for API Route Handlers.
  * Throws an error if user doesn't have required role.
- * @param allowedRoles - Array of roles that are permitted
- * @returns The authenticated user's session data
  */
 export async function requireRole(allowedRoles: string[]): Promise<SessionUser> {
   const user = await requireAuth();
   if (!allowedRoles.includes(user.role)) {
-    throw new Error('Forbidden');
+    throw new Error("Forbidden");
   }
   return user;
 }
@@ -109,7 +157,7 @@ export async function requireRole(allowedRoles: string[]): Promise<SessionUser> 
  * Helper to create standardized error responses for Route Handlers
  */
 export function authErrorResponse(error: unknown): Response {
-  const message = error instanceof Error ? error.message : 'Unknown error';
-  const status = message === 'Unauthorized' ? 401 : message === 'Forbidden' ? 403 : 500;
-  return Response.json({ message }, { status });
+  const message = error instanceof Error ? error.message : "Unknown error";
+  const status = message === "Unauthorized" ? 401 : message === "Forbidden" ? 403 : 500;
+  return Response.json({ success: false, error: { message } }, { status });
 }

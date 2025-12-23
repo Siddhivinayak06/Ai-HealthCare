@@ -35,14 +35,15 @@ export async function POST(request: NextRequest) {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        // Create user
+        // Create user - SECURITY: Always patient on self-registration
+        // Doctor role must be assigned by admin
         const result = await db
             .insert(users)
             .values({
                 email: email.toLowerCase(),
                 passwordHash: hashedPassword,
                 name,
-                role: role || "patient",
+                role: "patient",
             })
             .returning({
                 id: users.id,
