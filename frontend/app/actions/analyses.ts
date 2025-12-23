@@ -1,13 +1,13 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { imageAnalyses, riskPredictions, patients, auditLogs } from "@/lib/schema"
-import { eq, desc, and } from "drizzle-orm"
+import { imageAnalyses, riskPredictions, patients, auditLogs, scans, diagnoses } from "@/lib/schema"
+import { eq, desc, and, ne, lt } from "drizzle-orm"
 import { getSession } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { logActivity } from "./activity"
 import { generateText } from "ai"
-import type { ImageAnalysis, RiskPrediction } from "@/lib/db"
+import type { ImageAnalysis, RiskPrediction, Scan, Diagnosis } from "@/lib/db"
 
 /**
  * Require a valid session and return the user.
@@ -31,11 +31,45 @@ export async function saveImageAnalysis(data: {
   recommendations: string[]
   processingTime: number
   modelVersion: string
-}): Promise<{ success: boolean; error?: string; analysis?: ImageAnalysis }> {
+}): Promise<{ success: boolean; error?: string; analysis?: any }> {
   try {
     const user = await requireUser()
 
-    const result = await db
+    if (!data.patientId) return { success: false, error: "Patient ID is required" }
+
+    // 1. Insert into scans
+    const scanResult = await db
+      .insert(scans)
+      .values({
+        patientId: data.patientId,
+        scanType: data.scanType,
+        imageUrl: data.imageUrl || "",
+        uploadedBy: user.id,
+      })
+      .returning()
+
+    const newScan = scanResult[0]
+
+    // 2. Insert into diagnoses
+    const diagnosisResult = await db
+      .insert(diagnoses)
+      .values({
+        scanId: newScan.id,
+        predictedCondition: data.diagnosis,
+        confidenceScore: (data.confidence / 100).toString(),
+        riskLevel: data.severity,
+        explanation: {
+          findings: data.findings,
+          recommendations: data.recommendations
+        },
+        modelVersion: data.modelVersion,
+      })
+      .returning()
+
+    const newDiagnosis = diagnosisResult[0]
+
+    // 3. Fallback: Also insert into legacy imageAnalyses for compatibility
+    await db
       .insert(imageAnalyses)
       .values({
         userId: user.id,
@@ -43,26 +77,23 @@ export async function saveImageAnalysis(data: {
         scanType: data.scanType,
         imageUrl: data.imageUrl,
         diagnosis: data.diagnosis,
-        confidence: (data.confidence / 100).toString(), // Store as decimal 0-1
+        confidence: (data.confidence / 100).toString(),
         severity: data.severity,
         findings: data.findings,
         recommendations: data.recommendations.join(". "),
         processingTime: data.processingTime.toString(),
         modelVersion: data.modelVersion,
       })
-      .returning()
-
-    const newAnalysis = result[0] as ImageAnalysis
 
     await logActivity("Image analysis completed", "analysis", {
       scanType: data.scanType,
       severity: data.severity,
-      analysisId: newAnalysis.id,
+      analysisId: newScan.id,
     })
 
     revalidatePath("/imaging")
     revalidatePath("/")
-    return { success: true, analysis: newAnalysis }
+    return { success: true, analysis: newScan }
   } catch (error) {
     console.error("Error saving analysis:", error)
     return { success: false, error: "Database error" }
@@ -104,10 +135,18 @@ export async function getRecentAnalyses(limit = 10): Promise<any[]> {
       .limit(limit)
 
     return results.map(r => ({
-      ...r,
+      id: r.id,
+      scanType: r.scan_type,
+      imageUrl: r.image_url,
+      diagnosis: r.diagnosis || "",
       confidence: r.confidence ? parseFloat(r.confidence) * 100 : 0,
-      processing_time: r.processing_time ? parseFloat(r.processing_time) : 0,
-      recommendations: r.recommendations ? r.recommendations.split(". ") : []
+      severity: r.severity || "normal",
+      findings: r.findings,
+      recommendations: r.recommendations ? r.recommendations.split(". ") : [],
+      processingTime: r.processing_time ? parseFloat(r.processing_time) : 0,
+      modelVersion: r.model_version || "V1.0",
+      createdAt: r.created_at,
+      patientName: r.first_name ? `${r.first_name} ${r.last_name || ""}`.trim() : undefined,
     }))
   } catch (error) {
     console.error("Error getting recent analyses:", error)
@@ -193,7 +232,7 @@ export async function submitFeedback(data: {
       overrideReason: data.overrideReason,
       doctorOverride: data.action === "OVERRIDE",
       findings: data.findings,
-      confidenceScore: data.confidenceScore ? (data.confidenceScore / 100).toString() : null,
+      confidence: data.confidenceScore ? (data.confidenceScore / 100).toString() : null,
     })
 
     await logActivity(`Doctor ${data.action.toLowerCase()}d AI result`, "system", {
@@ -264,5 +303,54 @@ export async function predictHealthWithAI(patientData: any): Promise<any> {
   } catch (error) {
     console.error("Health prediction error:", error)
     return { success: false, error: "Prediction failed" }
+  }
+}
+
+/**
+ * Gets the most recent scan for a patient before a specific time/ID for comparison.
+ */
+export async function getLatestScanForPatient(patientId: string, beforeScanId?: string) {
+  try {
+    await requireUser()
+
+    // Find the latest scan for this patient
+    let query = db
+      .select({
+        id: scans.id,
+        scanType: scans.scanType,
+        imageUrl: scans.imageUrl,
+        createdAt: scans.createdAt,
+        diagnosis: diagnoses.predictedCondition,
+        severity: diagnoses.riskLevel,
+        confidence: diagnoses.confidenceScore,
+      })
+      .from(scans)
+      .leftJoin(diagnoses, eq(scans.id, diagnoses.scanId))
+      .where(eq(scans.patientId, patientId))
+      .$dynamic()
+
+    if (beforeScanId) {
+      query = query.where(ne(scans.id, beforeScanId))
+    }
+
+    const results = await query
+      .orderBy(desc(scans.createdAt))
+      .limit(1)
+
+    if (results.length === 0) return null
+
+    const r = results[0]
+    return {
+      id: r.id,
+      scanType: r.scanType,
+      imageUrl: r.imageUrl,
+      diagnosis: r.diagnosis || "No diagnosis",
+      severity: r.severity || "Unknown",
+      confidence: r.confidence ? parseFloat(r.confidence) * 100 : 0,
+      createdAt: r.createdAt
+    }
+  } catch (error) {
+    console.error("Error getting latest scan:", error)
+    return null
   }
 }

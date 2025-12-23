@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSession, requireAuth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { scans, diagnoses } from "@/lib/schema";
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || "http://127.0.0.1:8000";
 
@@ -10,14 +12,16 @@ const ALLOWED_MIME_TYPES = [
     "image/webp",
     "application/dicom",
     "application/octet-stream", // Some DICOM files use this
+    "application/zip",
+    "application/x-zip-compressed"
 ];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ML_TIMEOUT_MS = 30000; // 30 seconds
 
 export async function POST(req: NextRequest) {
     try {
-        const session = await getSession();
-        if (!session) {
+        const user = await requireAuth().catch(() => null);
+        if (!user) {
             return NextResponse.json(
                 { success: false, error: { message: "Not authorized" } },
                 { status: 401 }
@@ -26,6 +30,8 @@ export async function POST(req: NextRequest) {
 
         const formData = await req.formData();
         const file = formData.get("file") as File | null;
+        const patientId = formData.get("patientId") as string | null;
+        const scanType = (formData.get("scan_type") as string) || "xray";
 
         if (!file) {
             return NextResponse.json(
@@ -34,14 +40,21 @@ export async function POST(req: NextRequest) {
             );
         }
 
+        if (!patientId) {
+            return NextResponse.json(
+                { success: false, error: { message: "Patient ID is required" } },
+                { status: 400 }
+            );
+        }
+
         // ==================== Security: File Validation ====================
-        if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+        if (!ALLOWED_MIME_TYPES.includes(file.type) && !file.name.endsWith(".zip")) {
             return NextResponse.json(
                 {
                     success: false,
                     error: {
                         message: "Invalid file type",
-                        allowed: ["JPEG", "PNG", "WebP", "DICOM"],
+                        allowed: ["JPEG", "PNG", "WebP", "DICOM", "ZIP"],
                     },
                 },
                 { status: 400 }
@@ -75,8 +88,11 @@ export async function POST(req: NextRequest) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), ML_TIMEOUT_MS);
 
+        const isBatch = formData.get("is_batch") === "true" || file.name.endsWith(".zip");
+
         try {
-            const response = await fetch(`${ML_SERVICE_URL}/predict/image`, {
+            const endpoint = isBatch ? "batch" : "image";
+            const response = await fetch(`${ML_SERVICE_URL}/predict/${endpoint}`, {
                 method: "POST",
                 body: mlFormData,
                 signal: controller.signal,
@@ -98,8 +114,42 @@ export async function POST(req: NextRequest) {
             }
 
             const data = await response.json();
-            // Return data directly to match frontend expectations
-            return NextResponse.json(data);
+
+            // ==================== Persistence: Save to DB ====================
+            // 1. Save Scan metadata
+            const scanResult = await db.insert(scans).values({
+                patientId: patientId,
+                scanType: scanType,
+                imageUrl: data.image_url || data.id, // ML service might return a relative path or ID
+                uploadedBy: user.id,
+            }).returning();
+
+            const newScan = scanResult[0];
+
+            // 2. Save Diagnosis
+            const diagnosisResult = await db.insert(diagnoses).values({
+                scanId: newScan.id,
+                predictedCondition: data.diagnosis || "Unknown",
+                confidenceScore: data.confidence?.toString() || "0",
+                riskLevel: data.severity || "Low",
+                explanation: {
+                    findings: data.findings,
+                    recommendations: data.recommendations,
+                    explanation_text: data.explanation_text,
+                    explanation_url: data.explanation_url,
+                    confidence_metrics: data.confidence_metrics
+                },
+                modelVersion: data.modelVersion || "3.0.0",
+            }).returning();
+
+            const newDiagnosis = diagnosisResult[0];
+
+            // Return enriched data
+            return NextResponse.json({
+                ...data,
+                dbScanId: newScan.id,
+                dbDiagnosisId: newDiagnosis.id
+            });
         } catch (fetchError) {
             clearTimeout(timeout);
             const error = fetchError as Error;

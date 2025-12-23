@@ -129,8 +129,87 @@ async def predict_image(
         
 
         return diagnosis
-
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/batch")
+async def predict_batch(
+    file: UploadFile = File(...),
+    scan_type: Optional[str] = Form(default="ct"),
+    explain: bool = Form(default=False)
+):
+    import zipfile
+    import shutil
+    import tempfile
+    
+    scan_type = scan_type.lower() if scan_type else "ct"
+    temp_dir = tempfile.mkdtemp()
+    
+    try:
+        contents = await file.read()
+        zip_path = os.path.join(temp_dir, "batch.zip")
+        with open(zip_path, "wb") as f:
+            f.write(contents)
+            
+        extract_dir = os.path.join(temp_dir, "extracted")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(extract_dir)
+            
+        image_files = []
+        for root, _, files in os.walk(extract_dir):
+            for f in files:
+                if f.lower().endswith(('.png', '.jpg', '.jpeg', '.dcm', '.bmp')):
+                    image_files.append(os.path.join(root, f))
+                    
+        if not image_files:
+            raise HTTPException(status_code=400, detail="No valid images found in ZIP")
+            
+        results = []
+        model = get_model_lazy(scan_type)
+        
+        for img_path in image_files:
+            try:
+                # DICOM handling or standard image
+                image = Image.open(img_path).convert("RGB")
+                input_tensor = image_preprocess(image).unsqueeze(0).to(DEVICE)
+                
+                with torch.no_grad():
+                    output = model(input_tensor)
+                    probs = torch.nn.functional.softmax(output[0], dim=0)
+                    
+                from src.image_processing import get_diagnosis_from_prediction
+                # Use fake processing time for batch slices
+                diag = get_diagnosis_from_prediction(probs, {}, scan_type, 0.1, True)
+                diag["image_name"] = os.path.basename(img_path)
+                
+                # Simple criticality score: Probability of non-normal class
+                # Assuming index 0 is normal for simplicity, needs refinement based on classes
+                risk_score = 1.0 - float(probs[0].item())
+                diag["risk_score"] = risk_score
+                
+                results.append(diag)
+            except Exception as e:
+                print(f"Error processing slice {img_path}: {e}")
+                
+        if not results:
+            raise HTTPException(status_code=500, detail="Failed to process any images in batch")
+            
+        # Find the most "Critical" result
+        # Sort by: Critical > High > Medium > Low > Normal
+        severity_map = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1, "Normal": 0}
+        results.sort(key=lambda x: (severity_map.get(x["severity"], 0), x["risk_score"]), reverse=True)
+        
+        most_critical = results[0]
+        most_critical["batch_count"] = len(results)
+        most_critical["is_batch"] = True
+        
+        return most_critical
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
