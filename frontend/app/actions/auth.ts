@@ -1,79 +1,103 @@
-"use server"
+"use server";
 
-import { createUser, authenticateUser, createSession, setSessionCookie, deleteSession } from "@/lib/auth"
-import { redirect } from "next/navigation"
-
-export async function signUp(formData: FormData) {
-  const email = formData.get("email") as string
-  const password = formData.get("password") as string
-  const name = formData.get("name") as string
-  const role = formData.get("role") as string
-
-  if (!email || !password) {
-    return { error: "Email and password are required" }
-  }
-
-  if (password.length < 8) {
-    return { error: "Password must be at least 8 characters" }
-  }
-
-  const result = await createUser(email, password, name, role)
-
-  if (!result.success || !result.user || !result.token) {
-    return { error: result.error }
-  }
-
-  // Set session cookie with JWT
-  await createSession(result.token)
-
-  redirect("/")
-}
+import { db } from "@/lib/db";
+import { users } from "@/lib/schema";
+import { eq } from "drizzle-orm";
+import bcrypt from "bcryptjs";
+import { login, logout } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
 export async function signIn(formData: FormData) {
-  const email = formData.get("email") as string
-  const password = formData.get("password") as string
+  const email = formData.get("email") as string;
+  const password = formData.get("password") as string;
 
   if (!email || !password) {
-    return { error: "Email and password are required" }
+    return { error: "Please provide email and password" };
   }
 
-  const result = await authenticateUser(email, password)
-  console.log("SignIn Result:", result)
+  try {
+    const result = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email.toLowerCase()));
 
-  if (!result.success || !result.user || !result.token) {
-    return { error: result.error }
+    if (result.length === 0) {
+      return { error: "Invalid credentials" };
+    }
+
+    const user = result[0];
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+
+    if (!isMatch) {
+      return { error: "Invalid credentials" };
+    }
+
+    // Set session cookie
+    await login({
+      id: user.id,
+      email: user.email,
+      role: user.role || "patient",
+    });
+
+  } catch (error) {
+    console.error("Login error:", error);
+    return { error: "An unexpected error occurred" };
   }
 
-  // Set session cookie with JWT
-  await createSession(result.token)
+  redirect("/dashboard");
+}
 
-  redirect("/")
+export async function signUp(formData: FormData) {
+  const email = formData.get("email") as string;
+  const password = formData.get("password") as string;
+  const name = formData.get("name") as string;
+  const role = formData.get("role") as string || "patient";
+
+  if (!email || !password || !name) {
+    return { error: "Please provide name, email and password" };
+  }
+
+  try {
+    // Check if user exists
+    const existing = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email.toLowerCase()));
+
+    if (existing.length > 0) {
+      return { error: "User already exists" };
+    }
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Create user
+    const newUser = await db.insert(users).values({
+      email: email.toLowerCase(),
+      name,
+      passwordHash: hashedPassword,
+      role: role as any,
+    }).returning();
+
+    const user = newUser[0];
+
+    // Set session cookie
+    await login({
+      id: user.id,
+      email: user.email,
+      role: user.role || "patient",
+    });
+
+  } catch (error) {
+    console.error("Registration error:", error);
+    return { error: "An unexpected error occurred" };
+  }
+
+  redirect("/dashboard");
 }
 
 export async function signOut() {
-  await deleteSession()
-  redirect("/login")
-}
-
-export async function resetPassword(formData: FormData) {
-  const email = formData.get("email") as string
-  if (!email) return { success: false, error: "Email is required" }
-
-  // Dynamic import or binding could be needed if using lib directly, but we imported at top level
-  const { requestPasswordReset } = await import("@/lib/auth"); // Ensuring no circular deps if any
-  const result = await requestPasswordReset(email);
-  return result;
-}
-
-export async function updatePassword(token: string, formData: FormData) {
-  const password = formData.get("password") as string
-  const confirmPassword = formData.get("confirmPassword") as string
-
-  if (!password || !confirmPassword) return { success: false, error: "Passwords are required" }
-  if (password !== confirmPassword) return { success: false, error: "Passwords do not match" }
-  if (password.length < 8) return { success: false, error: "Password must be at least 8 characters" }
-
-  const { performPasswordReset } = await import("@/lib/auth");
-  const result = await performPasswordReset(token, password);
-  return result;
+  await logout();
+  redirect("/login");
 }

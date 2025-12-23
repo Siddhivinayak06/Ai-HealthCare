@@ -1,46 +1,38 @@
-import { cookies } from "next/headers"
+import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
 
-export async function POST(request: Request) {
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || "http://127.0.0.1:8000";
+
+export async function POST(req: NextRequest) {
     try {
-        // Get session token for authentication
-        const cookieStore = await cookies()
-        const token = cookieStore.get("medai_session")?.value || ""
-
-        if (!token) {
-            return Response.json({ error: "Not authenticated" }, { status: 401 })
+        const session = await getSession();
+        if (!session) {
+            return NextResponse.json({ message: "Not authorized" }, { status: 401 });
         }
 
-        // Get JSON data from request
-        const data = await request.json()
+        const body = await req.json();
 
-        // Forward to backend ML service
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api"
-
-        const response = await fetch(`${apiUrl}/predict/risk`, {
+        const response = await fetch(`${ML_SERVICE_URL}/predict/risk`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(data),
-        })
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
 
         if (!response.ok) {
-            const errorText = await response.text()
-            console.error("Backend error:", errorText)
-            return Response.json(
-                { error: "Risk prediction failed" },
+            const errorData = await response.json().catch(() => ({}));
+            return NextResponse.json(
+                { message: "ML Service Risk Prediction Failed", details: errorData },
                 { status: response.status }
-            )
+            );
         }
 
-        const result = await response.json()
-        return Response.json(result)
-    } catch (error) {
-        console.error("Risk prediction error:", error)
-        return Response.json(
-            { error: "Failed to predict risk" },
+        const data = await response.json();
+        return NextResponse.json(data);
+    } catch (error: any) {
+        console.error("Error proxying risk prediction to ML service:", error);
+        return NextResponse.json(
+            { message: "Failed to connect to ML service", error: error.message },
             { status: 500 }
-        )
+        );
     }
 }

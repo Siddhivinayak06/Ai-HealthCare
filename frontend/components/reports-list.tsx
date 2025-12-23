@@ -22,6 +22,8 @@ import { analyzeReport } from "@/app/actions/nlp"
 import { Activity, Beaker, Pill, AlertTriangle } from "lucide-react"
 import type { Report } from "@/lib/db"
 import { cn } from "@/lib/utils"
+import { EntityHighlighter } from "@/components/reports/entity-highlighter"
+import { ReportSummary } from "@/components/reports/report-summary"
 
 interface ReportsListProps {
   initialReports: Report[]
@@ -306,9 +308,10 @@ export function ReportsList({ initialReports, userRole }: ReportsListProps) {
                   <FileTextIcon className="h-4 w-4" />
                   Clinical Summary (BART-AI)
                 </h4>
-                <div className="p-4 rounded-xl bg-muted/50 border border-border/50 text-sm leading-relaxed text-foreground/90 italic">
-                  "{analysisResult.summary}"
-                </div>
+                <ReportSummary
+                  summary={analysisResult.summary}
+                  clinicalFindings={analysisResult.clinical_findings}
+                />
               </div>
 
               {/* Entities Section */}
@@ -317,26 +320,13 @@ export function ReportsList({ initialReports, userRole }: ReportsListProps) {
                   <Activity className="h-4 w-4" />
                   Extracted Medical Entities (BioBERT)
                 </h4>
-                <div className="flex flex-wrap gap-2">
-                  {analysisResult.entities.map((entity: any, i: number) => (
-                    <Badge
-                      key={i}
-                      variant="outline"
-                      className={cn(
-                        "flex items-center gap-1.5 py-1 px-2.5",
-                        entity.label.includes("Disease") || entity.label.includes("Sign") ? "border-rose-500/30 bg-rose-500/5 text-rose-500" :
-                          entity.label.includes("Drug") || entity.label.includes("Therapeutic") ? "border-violet-500/30 bg-violet-500/5 text-violet-500" :
-                            "border-blue-500/30 bg-blue-500/5 text-blue-500"
-                      )}
-                    >
-                      {entity.label.includes("Disease") ? <AlertTriangle className="h-3 w-3" /> :
-                        entity.label.includes("Drug") ? <Pill className="h-3 w-3" /> :
-                          <Beaker className="h-3 w-3" />}
-                      {entity.text}
-                      <span className="text-[10px] opacity-60 ml-1">{entity.label}</span>
-                    </Badge>
-                  ))}
-                </div>
+                <EntityHighlighter
+                  text={analysisResult.original_text || ""}
+                  entities={analysisResult.entities.map((e: any) => ({
+                    text: e.text,
+                    label: e.label
+                  }))}
+                />
               </div>
 
               {/* Doctor Brief Section */}
