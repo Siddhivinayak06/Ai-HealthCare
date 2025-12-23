@@ -133,7 +133,11 @@ export function ImageDiagnostics() {
             }
 
             const data = await response.json()
-            setResult(data)
+            if (data.success && data.data) {
+                setResult(data.data)
+            } else {
+                throw new Error(data.error?.message || "Invalid response format")
+            }
         } catch (err: any) {
             console.error(err)
             setError(err.message || "Failed to analyze image. Please try again.")

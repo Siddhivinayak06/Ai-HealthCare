@@ -227,13 +227,13 @@ export function ReportsList({ initialReports, userRole }: ReportsListProps) {
                   <div>
                     <p className="font-medium text-card-foreground">{report.title}</p>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-sm text-muted-foreground">{report.report_type}</span>
+                      <span className="text-sm text-muted-foreground">{(report as any).report_type || (report as any).reportType}</span>
                       <span className="text-muted-foreground">•</span>
-                      <span className="text-sm text-muted-foreground">{formatDate(report.created_at)}</span>
-                      {report.file_size && (
+                      <span className="text-sm text-muted-foreground">{formatDate((report as any).created_at || (report as any).createdAt)}</span>
+                      {((report as any).file_size || (report as any).fileSize) && (
                         <>
                           <span className="text-muted-foreground">•</span>
-                          <span className="text-sm text-muted-foreground">{report.file_size}</span>
+                          <span className="text-sm text-muted-foreground">{(report as any).file_size || (report as any).fileSize}</span>
                         </>
                       )}
                     </div>
@@ -310,7 +310,7 @@ export function ReportsList({ initialReports, userRole }: ReportsListProps) {
                 </h4>
                 <ReportSummary
                   summary={analysisResult.summary}
-                  clinicalFindings={analysisResult.clinical_findings}
+                  clinicalFindings={analysisResult.doctor_insights?.clinical_findings}
                 />
               </div>
 
@@ -340,13 +340,15 @@ export function ReportsList({ initialReports, userRole }: ReportsListProps) {
                     Actionable insights generated for medical staff consumption.
                   </p>
                   <div className="grid gap-2 mt-2">
-                    {Object.entries(analysisResult.doctor_insights).map(([key, val]: [string, any], i) => (
-                      <div key={i} className="text-sm font-medium flex items-center gap-2">
-                        <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                        <span className="capitalize">{key.replace(/_/g, ' ')}:</span>
-                        <span className="text-foreground/70 font-normal">{val.toString()}</span>
-                      </div>
-                    ))}
+                    {Object.entries(analysisResult.doctor_insights)
+                      .filter(([key]) => !['clinical_findings', 'patient_summary'].includes(key))
+                      .map(([key, val]: [string, any], i) => (
+                        <div key={i} className="text-sm font-medium flex items-center gap-2">
+                          <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                          <span className="capitalize">{key.replace(/_/g, ' ')}:</span>
+                          <span className="text-foreground/70 font-normal">{typeof val === 'object' ? JSON.stringify(val) : val.toString()}</span>
+                        </div>
+                      ))}
                   </div>
                 </div>
               )}

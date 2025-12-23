@@ -111,7 +111,7 @@ export function PatientDashboard({ user }: { user: any }) {
                         <ActivityIcon className="h-4 w-4 text-primary" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{latestRecord?.heart_rate || "--"} <span className="text-sm font-normal text-muted-foreground">bpm</span></div>
+                        <div className="text-2xl font-bold">{(latestRecord as any)?.heartRate || (latestRecord as any)?.heart_rate || "--"} <span className="text-sm font-normal text-muted-foreground">bpm</span></div>
                         <p className="text-xs text-muted-foreground">Latest measurement</p>
                     </CardContent>
                 </Card>
@@ -123,7 +123,7 @@ export function PatientDashboard({ user }: { user: any }) {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">
-                            {latestRecord ? `${latestRecord.blood_pressure_systolic}/${latestRecord.blood_pressure_diastolic}` : "--/--"}
+                            {latestRecord ? `${(latestRecord as any).bloodPressureSystolic || (latestRecord as any).blood_pressure_systolic}/${(latestRecord as any).bloodPressureDiastolic || (latestRecord as any).blood_pressure_diastolic}` : "--/--"}
                         </div>
                         <p className="text-xs text-muted-foreground">mmHg</p>
                     </CardContent>
@@ -146,7 +146,7 @@ export function PatientDashboard({ user }: { user: any }) {
                         <CalendarIcon className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{latestRecord ? new Date(latestRecord.record_date).toLocaleDateString() : "N/A"}</div>
+                        <div className="text-2xl font-bold">{latestRecord ? new Date((latestRecord as any).recordDate || (latestRecord as any).record_date).toLocaleDateString() : "N/A"}</div>
                         <p className="text-xs text-muted-foreground">Check-up date</p>
                     </CardContent>
                 </Card>
@@ -164,7 +164,7 @@ export function PatientDashboard({ user }: { user: any }) {
                                 {prescriptions.slice(0, 3).map((rx: any) => (
                                     <li key={rx.id} className="flex items-start justify-between gap-3 p-3 rounded-lg bg-secondary/50">
                                         <div>
-                                            <p className="font-medium">{rx.medication_name}</p>
+                                            <p className="font-medium">{rx.medicationName || rx.medication_name}</p>
                                             <p className="text-xs text-muted-foreground">{rx.dosage} - {rx.frequency}</p>
                                         </div>
                                         <span className={`text-[10px] px-2 py-1 rounded-full ${rx.status === 'Active' ? 'bg-green-500/10 text-green-500' : 'bg-gray-500/10 text-gray-500'}`}>

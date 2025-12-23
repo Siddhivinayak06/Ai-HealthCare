@@ -38,12 +38,14 @@ export function PatientsList({ patients, onSelectPatient, onRefresh }: PatientsL
     phone: "",
   })
 
-  const filteredPatients = patients.filter(
-    (p) =>
-      p.first_name.toLowerCase().includes(search.toLowerCase()) ||
-      p.last_name.toLowerCase().includes(search.toLowerCase()) ||
-      p.email?.toLowerCase().includes(search.toLowerCase()),
-  )
+  const filteredPatients = patients.filter((p) => {
+    const searchLower = search.toLowerCase()
+    const firstName = p.firstName?.toLowerCase() || ""
+    const lastName = p.lastName?.toLowerCase() || ""
+    const email = p.email?.toLowerCase() || ""
+
+    return firstName.includes(searchLower) || lastName.includes(searchLower) || email.includes(searchLower)
+  })
 
   const handleAddPatient = async () => {
     if (!newPatient.firstName || !newPatient.lastName || !newPatient.dateOfBirth) return
@@ -211,34 +213,34 @@ export function PatientsList({ patients, onSelectPatient, onRefresh }: PatientsL
           </div>
         ) : (
           <div className="space-y-3">
-            {filteredPatients.map((patient) => (
+            {filteredPatients.map((p) => (
               <div
-                key={patient.id}
+                key={p.id}
                 className="flex items-center justify-between p-4 rounded-xl bg-background/50 hover:bg-muted/50 transition-colors ring-1 ring-border/30"
               >
                 <div className="flex items-center gap-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold">
-                    {patient.first_name[0]}
-                    {patient.last_name[0]}
+                    {p.firstName?.[0] || "?"}
+                    {p.lastName?.[0] || "?"}
                   </div>
                   <div>
                     <p className="font-medium text-card-foreground">
-                      {patient.first_name} {patient.last_name}
+                      {p.firstName} {p.lastName}
                     </p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-sm text-muted-foreground">
-                        {calculateAge(patient.date_of_birth)} years old
+                        {p.dateOfBirth ? calculateAge(p.dateOfBirth) : "N/A"} years old
                       </span>
-                      {patient.gender && (
+                      {p.gender && (
                         <>
                           <span className="text-muted-foreground">•</span>
-                          <span className="text-sm text-muted-foreground capitalize">{patient.gender}</span>
+                          <span className="text-sm text-muted-foreground capitalize">{p.gender}</span>
                         </>
                       )}
-                      {patient.email && (
+                      {p.email && (
                         <>
                           <span className="text-muted-foreground">•</span>
-                          <span className="text-sm text-muted-foreground">{patient.email}</span>
+                          <span className="text-sm text-muted-foreground">{p.email}</span>
                         </>
                       )}
                     </div>
@@ -248,7 +250,7 @@ export function PatientsList({ patients, onSelectPatient, onRefresh }: PatientsL
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => onSelectPatient(patient)}
+                    onClick={() => onSelectPatient(p)}
                     className="bg-background/50"
                   >
                     Analyze Health
@@ -256,7 +258,7 @@ export function PatientsList({ patients, onSelectPatient, onRefresh }: PatientsL
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleDeletePatient(patient.id)}
+                    onClick={() => handleDeletePatient(p.id)}
                     className="text-destructive hover:text-destructive hover:bg-destructive/10"
                   >
                     Delete

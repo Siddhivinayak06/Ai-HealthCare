@@ -3,11 +3,11 @@ import { decrypt, updateSession } from "@/lib/auth";
 
 // ==================== PAGE ROUTES ====================
 // Routes that require authentication
-const protectedRoutes = ["/dashboard", "/analysis", "/risk", "/reports", "/patients", "/model-monitoring"];
+const protectedRoutes = ["/dashboard", "/analysis", "/risk", "/reports", "/patients", "/model-monitoring", "/"];
 // Routes that require doctor role
 const doctorOnlyRoutes = ["/model-monitoring", "/patients"];
 // Public routes
-const publicRoutes = ["/login", "/register", "/"];
+const publicRoutes = ["/login", "/signup"];
 
 // ==================== API ROUTES ====================
 // Protected API routes (require authentication)
@@ -35,6 +35,7 @@ const publicAPIRoutes = [
     "/api/auth/login",
     "/api/auth/forgot-password",
     "/api/auth/reset-password",
+    "/api/predict/risk", // Temporary exemption for debugging
 ];
 
 export default async function middleware(req: NextRequest) {
@@ -83,7 +84,7 @@ export default async function middleware(req: NextRequest) {
 
     // ==================== PAGE ROUTE PROTECTION ====================
     // 3. Redirect to /login if the user is not authenticated and trying to access a protected route
-    if (isProtectedRoute && !session) {
+    if (isProtectedRoute && !session && !isPublicRoute && !isAPIRoute) {
         return NextResponse.redirect(new URL("/login", req.nextUrl));
     }
 

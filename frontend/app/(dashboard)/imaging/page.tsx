@@ -53,6 +53,9 @@ export default function ImagingPage() {
     setIsAnalyzing(true)
 
     const scanTypeNames: Record<string, string> = {
+      "xray": "X-Ray",
+      "ct": "CT Scan",
+      "mri": "MRI Scan",
       "chest-xray": "Chest X-Ray",
       "brain-mri": "Brain MRI",
       "ct-scan": "CT Scan",
@@ -68,6 +71,8 @@ export default function ImagingPage() {
     for (const img of images) {
       const formData = new FormData()
       formData.append("file", img.file)
+      formData.append("scan_type", scanType)
+      formData.append("explain", "true")
 
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
@@ -79,43 +84,48 @@ export default function ImagingPage() {
         if (res.ok) {
           const data = await res.json()
 
-          const severityMap = (pred: string) => {
-            if (pred.includes("Normal")) return "normal"
-            if (pred.includes("Pneumonia")) return "high"
-            return "moderate"
+          // Map severity based on system spec (🔴 Critical, 🟠 Moderate, 🟢 Stable/Normal)
+          const severityMap = (severity: string): "normal" | "low" | "moderate" | "high" => {
+            const s = severity.toLowerCase()
+            if (s === 'critical' || s === 'high') return "high"
+            if (s === 'medium' || s === 'moderate') return "moderate"
+            if (s === 'low') return "low"
+            return "normal"
           }
 
           const result: AnalysisResult = {
-            id: `result-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            id: data.id || `result-${Date.now()}`,
             imageUrl: img.preview,
-            scanType: scanTypeName,
-            diagnosis: data.prediction,
-            confidence: Math.round(data.confidence * 100),
-            severity: severityMap(data.prediction),
-            findings: [
-              {
-                region: "Global",
-                description: `Detected patterns consistent with ${data.prediction}`,
-                probability: Math.round(data.confidence * 100)
-              }
-            ],
-            recommendations: data.prediction.includes("Normal")
-              ? ["Routine checkup recommended in 1 year"]
-              : ["Immediate consultation with pulmonologist", "Confirmatory tests required"],
-            processingTime: 0.5,
-            modelVersion: "DenseNet121 v1",
+            heatmapUrl: data.explanation_url,
+            scanType: data.scan_type || scanTypeName,
+            diagnosis: data.prediction || data.diagnosis,
+            confidence: Math.round((data.confidence || 0) * 100),
+            severity: severityMap(data.severity || "Normal"),
+            findings: data.findings ? data.findings.map((f: string) => ({
+              region: "Area of Interest",
+              description: f,
+              probability: Math.round((data.confidence || 0) * 100)
+            })) : [],
+            recommendations: data.recommendations || [],
+            processingTime: data.processing_time || 0.5,
+            modelVersion: data.model_version || "DenseNet121 v1.2",
+            autoCorrected: data.auto_corrected || false
           }
 
           newResults.push(result)
 
           await saveImageAnalysis({
             patientId: patientId || undefined,
-            scanType: scanTypeName,
-            imageUrl: img.preview,
+            scanType: result.scanType,
+            imageUrl: result.imageUrl,
             diagnosis: result.diagnosis,
             confidence: result.confidence,
             severity: result.severity,
-            findings: result.findings,
+            findings: {
+              findings: result.findings,
+              heatmapUrl: result.heatmapUrl,
+              autoCorrected: result.autoCorrected
+            },
             recommendations: result.recommendations,
             processingTime: result.processingTime,
             modelVersion: result.modelVersion,
@@ -134,15 +144,17 @@ export default function ImagingPage() {
       analysesData.map((a) => ({
         id: a.id,
         imageUrl: a.image_url || "/medical-scan-abstract.png",
+        heatmapUrl: a.findings?.heatmapUrl,
         scanType: a.scan_type,
         diagnosis: a.diagnosis || "",
         confidence: a.confidence || 0,
-        severity: (a.severity as "normal" | "low" | "moderate" | "high") || "normal",
-        findings: (a.findings as AnalysisResult["findings"]) || [],
+        severity: (a.severity as any) || "normal",
+        findings: (a.findings?.findings) || [],
         recommendations: a.recommendations || [],
         processingTime: a.processing_time || 0,
         modelVersion: a.model_version || "MedAI v3.2.1",
         createdAt: a.created_at,
+        autoCorrected: a.findings?.autoCorrected || false
       })),
     )
   }

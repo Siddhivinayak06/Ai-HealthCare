@@ -109,6 +109,14 @@ async def predict_image(
         diagnosis["id"] = image_id
         diagnosis["scan_type"] = SCAN_CONDITIONS[final_scan_type]["name"]
         
+        # Frontend compatibility: ensure 'details' field exists
+        if "findings" in diagnosis and diagnosis["findings"]:
+            diagnosis["details"] = ". ".join(diagnosis["findings"])
+        elif "recommendations" in diagnosis and diagnosis["recommendations"]:
+            diagnosis["details"] = diagnosis["recommendations"][0]
+        else:
+            diagnosis["details"] = f"Analysis completed with {diagnosis['confidence']:.1%} confidence."
+        
         if explain:
             explanation = UnifiedExplainer.explain_image(model, input_tensor, image, image_id, DATA_DIR)
             if explanation:
@@ -119,6 +127,7 @@ async def predict_image(
                 diagnosis["explanation_url"] = None
                 diagnosis["explanation_text"] = "XAI generation skipped or failed."
         
+
         return diagnosis
 
     except Exception as e:

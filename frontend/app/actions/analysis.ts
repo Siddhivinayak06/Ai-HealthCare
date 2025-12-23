@@ -19,12 +19,12 @@ export async function saveImageAnalysis(data: {
     processingTime: number;
     modelVersion: string;
 }) {
-    const session = await getSession();
-    if (!session) throw new Error("Not authorized");
+    const { user } = await getSession();
+    if (!user) throw new Error("Not authorized");
 
     try {
         const result = await db.insert(imageAnalyses).values({
-            userId: session.id,
+            userId: user.id,
             patientId: data.patientId || null,
             scanType: data.scanType,
             imageUrl: data.imageUrl || null,
@@ -50,7 +50,7 @@ export async function saveImageAnalysis(data: {
 
         // Record Audit
         await db.insert(auditLogs).values({
-            userId: session.id,
+            userId: user.id,
             action: 'PREDICTION',
             entityType: 'IMAGE_ANALYSIS',
             entityId: newAnalysis.id,
@@ -66,10 +66,10 @@ export async function saveImageAnalysis(data: {
         });
 
         revalidatePath("/analysis");
-        return { ...newAnalysis, triage: triageResult };
+        return { success: true, data: { ...newAnalysis, triage: triageResult } };
     } catch (error) {
         console.error("Save image analysis error:", error);
-        throw new Error("Failed to save analysis");
+        return { success: false, error: "Failed to save analysis" };
     }
 }
 
@@ -82,12 +82,12 @@ export async function saveRiskPrediction(data: {
     contributingFactors: string;
     recommendations: string;
 }) {
-    const session = await getSession();
-    if (!session) throw new Error("Not authorized");
+    const { user } = await getSession();
+    if (!user) throw new Error("Not authorized");
 
     try {
         const result = await db.insert(riskPredictions).values({
-            userId: session.id,
+            userId: user.id,
             patientId: data.patientId,
             healthRecordId: data.healthRecordId || null,
             condition: data.condition,

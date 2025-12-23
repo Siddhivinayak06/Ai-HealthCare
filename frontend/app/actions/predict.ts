@@ -3,11 +3,11 @@
 import { getSession } from "@/lib/auth"
 import { cookies } from "next/headers"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
+const API_URL = process.env.ML_SERVICE_URL || "http://127.0.0.1:8000"
 
 async function getSessionToken() {
     const cookieStore = await cookies()
-    return cookieStore.get("medai_session")?.value || ""
+    return cookieStore.get("auth_token")?.value || ""
 }
 
 export async function predictRisk(data: any, explain: boolean = false) {

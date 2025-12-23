@@ -433,7 +433,7 @@ export default function RiskPage() {
                                             AI Recommendations
                                         </h4>
                                         <ul className="space-y-2">
-                                            {result.recommendation.map((rec: string, i: number) => (
+                                            {Array.isArray(result.recommendation) && result.recommendation.map((rec: string, i: number) => (
                                                 <li
                                                     key={i}
                                                     className="flex items-start gap-3 text-sm p-3 rounded-lg bg-secondary/50 border border-border/50 animate-in slide-in-from-left duration-300"

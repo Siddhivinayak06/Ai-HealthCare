@@ -8,7 +8,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api"
 
 async function getSessionToken() {
     const cookieStore = await cookies()
-    return cookieStore.get("medai_session")?.value
+    return cookieStore.get("auth_token")?.value
 }
 
 export async function getUserProfile() {

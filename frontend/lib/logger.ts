@@ -45,9 +45,9 @@ function log(level: LogLevel, message: string, context?: LogContext, error?: unk
         timestamp: new Date().toISOString(),
         level,
         message,
-        ...(context && { context }),
-        ...(error && { error: formatError(error) }),
     };
+    if (context) entry.context = context;
+    if (error) entry.error = formatError(error);
 
     // In production, output as JSON for log aggregation
     if (process.env.NODE_ENV === "production") {

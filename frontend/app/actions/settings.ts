@@ -123,5 +123,5 @@ export async function changePassword(data: {
 import { cookies } from "next/headers"
 async function getSessionToken() {
   const cookieStore = await cookies()
-  return cookieStore.get("medai_session")?.value || ""
+  return cookieStore.get("auth_token")?.value || ""
 }

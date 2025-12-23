@@ -36,6 +36,7 @@ export async function signIn(formData: FormData) {
     await login({
       id: user.id,
       email: user.email,
+      name: user.name,
       role: user.role || "patient",
     });
 
@@ -86,6 +87,7 @@ export async function signUp(formData: FormData) {
     await login({
       id: user.id,
       email: user.email,
+      name: user.name,
       role: user.role || "patient",
     });
 
@@ -100,4 +102,61 @@ export async function signUp(formData: FormData) {
 export async function signOut() {
   await logout();
   redirect("/login");
+}
+
+// Forgot password - sends email with reset link
+export async function resetPassword(formData: FormData) {
+  const email = formData.get("email") as string;
+
+  if (!email) {
+    return { error: "Please provide your email" };
+  }
+
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/auth/forgot-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { error: data.message || "Failed to send reset email" };
+    }
+
+    return { success: true, message: "Password reset email sent" };
+  } catch (error) {
+    console.error("Reset password error:", error);
+    return { error: "An unexpected error occurred" };
+  }
+}
+
+// Update password with reset token
+export async function updatePassword(formData: FormData) {
+  const token = formData.get("token") as string;
+  const password = formData.get("password") as string;
+
+  if (!token || !password) {
+    return { error: "Invalid request" };
+  }
+
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/auth/reset-password`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, password }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { error: data.message || "Failed to reset password" };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Update password error:", error);
+    return { error: "An unexpected error occurred" };
+  }
 }

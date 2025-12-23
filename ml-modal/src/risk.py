@@ -1,4 +1,4 @@
-from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.ensemble import RandomForestClassifier
 import pandas as pd
 import numpy as np
 import joblib
@@ -65,10 +65,9 @@ def train_improved_risk_model(data_df=None):
 
     X_processed = preprocess_risk_features(X)
     
-    model = HistGradientBoostingClassifier(
-        max_iter=100, 
-        learning_rate=0.1, 
-        max_depth=5,
+    model = RandomForestClassifier(
+        n_estimators=100, 
+        max_depth=10, 
         random_state=42
     )
     model.fit(X_processed, y)
@@ -86,9 +85,10 @@ def predict_patient_risk(model, data):
     # Handle version mismatch if any or corrupted model
     try:
         risk_prob = model.predict_proba(input_df)[0][1]
-    except:
+    except Exception as e:
+        print(f"❌ Risk Model Prediction Error: {e}")
         # Fallback to simple prediction if feature names mismatch or model logic fails
-        return {"error": "Model prediction failed. Please retrain."}
+        return {"error": f"Model prediction failed: {str(e)}"}
 
     risk_level = "High" if risk_prob > 0.7 else "Medium" if risk_prob > 0.35 else "Low"
     

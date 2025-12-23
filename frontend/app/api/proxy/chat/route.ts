@@ -7,7 +7,7 @@ export async function POST(req: Request) {
     try {
         const body = await req.json()
         const cookieStore = await cookies()
-        const token = cookieStore.get("medai_session")?.value
+        const token = cookieStore.get("auth_token")?.value
 
         const res = await fetch(`${API_URL}/chat`, {
             method: "POST",

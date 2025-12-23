@@ -1,28 +1,29 @@
 "use server"
 
-import { cookies } from "next/headers"
+import { db } from "@/lib/db"
+import { prescriptions } from "@/lib/schema"
+import { eq, desc } from "drizzle-orm"
+import { getSession } from "@/lib/auth"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api"
-
-async function getSessionToken() {
-    const cookieStore = await cookies()
-    return cookieStore.get("medai_session")?.value
+async function requireUser() {
+    const { user } = await getSession()
+    if (!user) {
+        throw new Error("Unauthorized")
+    }
+    return user
 }
 
 export async function getPatientPrescriptions(patientId: string) {
-    const token = await getSessionToken()
-    if (!token) return []
-
     try {
-        const res = await fetch(`${API_URL}/prescriptions/patient/${patientId}`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-            cache: "no-store",
-        })
+        await requireUser()
 
-        if (!res.ok) throw new Error("Failed to fetch prescriptions")
-        return await res.json()
+        const result = await db
+            .select()
+            .from(prescriptions)
+            .where(eq(prescriptions.patientId, patientId))
+            .orderBy(desc(prescriptions.createdAt))
+
+        return result
     } catch (error) {
         console.error("Get prescriptions error:", error)
         return []
