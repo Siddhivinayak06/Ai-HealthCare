@@ -7,6 +7,8 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { AlertCircleIcon, CheckCircleIcon, HeartPulseIcon, BrainIcon, ActivityIcon } from "@/components/icons"
+import { ShapChart } from "@/components/explainability/shap-chart"
+import { ConfidenceBadge } from "@/components/explainability/confidence-badge"
 
 export interface RiskPrediction {
   condition: string
@@ -15,6 +17,14 @@ export interface RiskPrediction {
   factors: string[]
   recommendations: string[]
   icon: React.ComponentType<{ className?: string }>
+  confidence_metrics?: {
+    confidence: number
+    uncertainty_level: 'LOW' | 'MEDIUM' | 'HIGH'
+  }
+  shap_explanation?: {
+    top_factors: Array<{ feature: string, impact: 'High' | 'Moderate' | 'Low', direction: 'increases' | 'decreases' }>
+    summary: string
+  }
 }
 
 interface RiskPredictionProps {
@@ -75,6 +85,12 @@ export function RiskPredictionCard({ predictions }: RiskPredictionProps) {
               >
                 {prediction.severity} risk
               </Badge>
+              {prediction.confidence_metrics && (
+                <ConfidenceBadge
+                  confidence={prediction.confidence_metrics.confidence}
+                  uncertainty={prediction.confidence_metrics.uncertainty_level}
+                />
+              )}
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -136,6 +152,13 @@ export function RiskPredictionCard({ predictions }: RiskPredictionProps) {
                 ))}
               </ul>
             </div>
+            {/* SHAP Explanation */}
+            {prediction.shap_explanation && (
+              <ShapChart
+                factors={prediction.shap_explanation.top_factors}
+                note={prediction.shap_explanation.summary}
+              />
+            )}
           </CardContent>
         </Card>
       ))}

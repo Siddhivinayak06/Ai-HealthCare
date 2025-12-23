@@ -1,7 +1,6 @@
-import os
-from PIL import Image
 from .gradcam import get_gradcam_explanation
 from .shap_risk import get_risk_explanation
+from ..confidence.services import get_prediction_with_confidence
 
 class UnifiedExplainer:
     """
@@ -12,6 +11,7 @@ class UnifiedExplainer:
     def explain_image(model, input_tensor, original_image, image_id, data_dir):
         """Generates heatmap and saves it, returning the URL and textual summary."""
         try:
+            # 1. Visual Heatmap (Grad-CAM)
             heatmap_img = get_gradcam_explanation(model, input_tensor, original_image)
             
             output_dir = os.path.join(data_dir, "explanations")
@@ -21,12 +21,17 @@ class UnifiedExplainer:
             heatmap_path = os.path.join(output_dir, filename)
             heatmap_img.save(heatmap_path)
             
-            # Simple textual explanation based on existence of heatmap
-            textual = "The AI model focused on specific localized regions to identify diagnostic patterns. These areas are highlighted in the generated heatmap."
+            # 2. Confidence Estimation (MC Dropout)
+            conf_metrics = get_prediction_with_confidence(model, input_tensor)["confidence_metrics"]
+            
+            # 3. Textual Summary
+            textual = f"The AI model focused on specific localized regions to identify diagnostic patterns. "
+            textual += f"Confidence level is {conf_metrics['confidence']:.1%} with {conf_metrics['uncertainty_level']} uncertainty."
             
             return {
                 "url": f"/outputs/explanations/{filename}",
-                "summary": textual
+                "summary": textual,
+                "confidence_metrics": conf_metrics
             }
         except Exception as e:
             print(f"❌ Image explanation failed: {e}")
@@ -35,20 +40,15 @@ class UnifiedExplainer:
     @staticmethod
     def explain_risk(model, input_df):
         """Generates tabular feature importance and a descriptive text summary."""
-        importance = get_risk_explanation(model, input_df)
-        if not importance:
+        # Risk models (XGBoost/LightGBM) don't use MC Dropout the same way, 
+        # but we can use the structured output from shap_risk.
+        explanation_data = get_risk_explanation(model, input_df)
+        if "error" in explanation_data:
             return None
             
-        # Sort features by absolute importance
-        sorted_features = sorted(importance.items(), key=lambda x: abs(x[1]), reverse=True)
-        top_factors = [f[0].replace('_', ' ').capitalize() for f in sorted_features if f[1] > 0][:3]
-        
-        if top_factors:
-            summary = f"The primary factors contributing to this risk level are: {', '.join(top_factors)}."
-        else:
-            summary = "No single vital sign showed a dominant influence on this prediction."
-            
         return {
-            "feature_importance": importance,
-            "summary": summary
+            "feature_importance": explanation_data["raw_shap"],
+            "structured_summary": explanation_data["structured_summary"],
+            "doctor_note": explanation_data["doctor_note"],
+            "summary": explanation_data["doctor_note"]
         }

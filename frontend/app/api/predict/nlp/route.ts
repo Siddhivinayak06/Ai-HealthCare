@@ -10,25 +10,18 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: "Not authorized" }, { status: 401 });
         }
 
-        const formData = await req.formData();
-        const file = formData.get("file") as File;
+        const body = await req.json();
 
-        if (!file) {
-            return NextResponse.json({ message: "No image file uploaded" }, { status: 400 });
-        }
-
-        const mlFormData = new FormData();
-        mlFormData.append("file", file);
-
-        const response = await fetch(`${ML_SERVICE_URL}/predict/image`, {
+        const response = await fetch(`${ML_SERVICE_URL}/predict/nlp`, {
             method: "POST",
-            body: mlFormData,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
         });
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             return NextResponse.json(
-                { message: "ML Service Image Analysis Failed", details: errorData },
+                { message: "ML Service NLP Analysis Failed", details: errorData },
                 { status: response.status }
             );
         }
@@ -36,7 +29,7 @@ export async function POST(req: NextRequest) {
         const data = await response.json();
         return NextResponse.json(data);
     } catch (error: any) {
-        console.error("Error proxying image to ML service:", error);
+        console.error("Error proxying NLP to ML service:", error);
         return NextResponse.json(
             { message: "Failed to connect to ML service", error: error.message },
             { status: 500 }

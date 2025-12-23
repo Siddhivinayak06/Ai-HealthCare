@@ -1,108 +1,113 @@
-"use server"
+"use server";
 
-import { getSession } from "@/lib/auth"
-import { revalidatePath } from "next/cache"
-import { cookies } from "next/headers"
+import { db } from "@/lib/db";
+import { imageAnalyses, riskPredictions, auditLogs } from "@/lib/schema";
+import { getSession } from "@/lib/auth";
+import { triageCase } from "@/services/triage";
+import { logActivity } from "./activity";
+import { revalidatePath } from "next/cache";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api"
-
-async function getSessionToken() {
-    const cookieStore = await cookies()
-    return cookieStore.get("medai_session")?.value
-}
-
-export async function saveImageAnalysis(data: any) {
-    const token = await getSessionToken()
-    if (!token) return { error: "Not authenticated" }
+export async function saveImageAnalysis(data: {
+    patientId?: string;
+    scanType: string;
+    imageUrl?: string;
+    diagnosis: string;
+    confidence: number;
+    severity: string;
+    findings: any;
+    recommendations?: string;
+    processingTime: number;
+    modelVersion: string;
+}) {
+    const session = await getSession();
+    if (!session) throw new Error("Not authorized");
 
     try {
-        const res = await fetch(`${API_URL}/analyses/image`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(data),
-        })
+        const result = await db.insert(imageAnalyses).values({
+            userId: session.id,
+            patientId: data.patientId || null,
+            scanType: data.scanType,
+            imageUrl: data.imageUrl || null,
+            diagnosis: data.diagnosis,
+            confidence: data.confidence.toString(),
+            severity: data.severity,
+            findings: data.findings,
+            recommendations: data.recommendations,
+            processingTime: data.processingTime.toString(),
+            modelVersion: data.modelVersion,
+        }).returning();
 
-        if (!res.ok) {
-            const error = await res.json()
-            return { error: error.message || "Failed to save analysis" }
-        }
+        const newAnalysis = result[0];
 
-        revalidatePath("/analysis")
-        revalidatePath("/patients") // Also revalidate patients as they might show history
-        return await res.json()
+        // AI Triage
+        const triageResult = triageCase({
+            severity: data.severity,
+            confidence_metrics: {
+                confidence: data.confidence,
+                uncertainty_level: data.findings?.uncertainty_level || 'LOW'
+            }
+        });
+
+        // Record Audit
+        await db.insert(auditLogs).values({
+            userId: session.id,
+            action: 'PREDICTION',
+            entityType: 'IMAGE_ANALYSIS',
+            entityId: newAnalysis.id,
+            findings: data.findings,
+            confidenceScore: data.confidence.toString(),
+        });
+
+        await logActivity("Image analysis completed", "analysis", {
+            scanType: data.scanType,
+            severity: data.severity,
+            analysisId: newAnalysis.id,
+            priority: triageResult.priority
+        });
+
+        revalidatePath("/analysis");
+        return { ...newAnalysis, triage: triageResult };
     } catch (error) {
-        console.error("Save analysis error:", error)
-        return { error: "Failed to save analysis" }
+        console.error("Save image analysis error:", error);
+        throw new Error("Failed to save analysis");
     }
 }
 
-export async function saveRiskPrediction(data: any) {
-    const token = await getSessionToken()
-    if (!token) return { error: "Not authenticated" }
+export async function saveRiskPrediction(data: {
+    patientId: string;
+    healthRecordId?: string;
+    condition: string;
+    riskScore: number;
+    severity: string;
+    contributingFactors: string;
+    recommendations: string;
+}) {
+    const session = await getSession();
+    if (!session) throw new Error("Not authorized");
 
     try {
-        const res = await fetch(`${API_URL}/analyses/risk`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(data),
-        })
+        const result = await db.insert(riskPredictions).values({
+            userId: session.id,
+            patientId: data.patientId,
+            healthRecordId: data.healthRecordId || null,
+            condition: data.condition,
+            riskScore: data.riskScore.toString(),
+            severity: data.severity,
+            contributingFactors: data.contributingFactors,
+            recommendations: data.recommendations,
+            modelVersion: 'HealthPredict v2.1',
+        }).returning();
 
-        if (!res.ok) {
-            const error = await res.json()
-            return { error: error.message || "Failed to save prediction" }
-        }
+        await logActivity("Risk prediction generated", "prediction", {
+            patientId: data.patientId,
+            condition: data.condition,
+            riskScore: data.riskScore
+        });
 
-        revalidatePath("/risk")
-        revalidatePath("/patients")
-        return { success: true }
+        revalidatePath("/risk");
+        return result[0];
     } catch (error) {
-        console.error("Save risk prediction error:", error)
-        return { error: "Failed to save prediction" }
-    }
-}
-
-export async function getRecentAnalyses(limit: number = 5) {
-    const token = await getSessionToken()
-    if (!token) return []
-
-    try {
-        const res = await fetch(`${API_URL}/analyses/recent?limit=${limit}`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-            cache: "no-store",
-        })
-
-        if (!res.ok) return []
-        return await res.json()
-    } catch (error) {
-        console.error("Get recent analyses error:", error)
-        return []
-    }
-}
-
-export async function getPatientPredictions(patientId: string) {
-    const token = await getSessionToken()
-    if (!token) return []
-
-    try {
-        const res = await fetch(`${API_URL}/analyses/risk/${patientId}`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-            cache: "no-store",
-        })
-
-        if (!res.ok) return []
-        return await res.json()
-    } catch (error) {
-        console.error("Get patient predictions error:", error)
-        return []
+        console.error("Save risk prediction error:", error);
+        throw new Error("Failed to save risk prediction");
     }
 }

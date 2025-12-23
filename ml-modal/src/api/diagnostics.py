@@ -79,12 +79,18 @@ async def predict_image(
             output = model(input_tensor)
             probs = torch.nn.functional.softmax(output[0], dim=0)
             
+        from src.confidence.services import get_prediction_with_confidence
+        
+        conf_result = get_prediction_with_confidence(model, input_tensor)
+        confidence_metrics = conf_result["confidence_metrics"]
+        
         processing_time = time.time() - start_time
         
         diagnosis = get_diagnosis_from_prediction(
             probs, image_features, final_scan_type, processing_time, is_trained
         )
         
+        diagnosis["confidence_metrics"] = confidence_metrics
         diagnosis["modality_debug"] = modality_debug
         if auto_corrected:
             diagnosis["findings"].insert(0, f"⚠️ Note: Auto-detected as {SCAN_CONDITIONS[final_scan_type]['name']} instead of {SCAN_CONDITIONS[scan_type]['name']}")
@@ -108,6 +114,7 @@ async def predict_image(
             if explanation:
                 diagnosis["explanation_url"] = explanation["url"]
                 diagnosis["explanation_text"] = explanation["summary"]
+                diagnosis["explanation_details"] = explanation.get("confidence_metrics")
             else:
                 diagnosis["explanation_url"] = None
                 diagnosis["explanation_text"] = "XAI generation skipped or failed."

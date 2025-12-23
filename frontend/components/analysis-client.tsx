@@ -8,6 +8,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { PatientSelector } from "@/components/patient-selector"
+import { HeatmapViewer } from "@/components/explainability/heatmap-viewer"
+import { ConfidenceBadge } from "@/components/explainability/confidence-badge"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 
 interface AnalysisClientProps {
     userRole: string
@@ -27,6 +31,7 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
     const [error, setError] = useState<string | null>(null)
     const [isDragging, setIsDragging] = useState(false)
     const [scanType, setScanType] = useState("xray")
+    const [explain, setExplain] = useState(true)
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -98,6 +103,7 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
         const formData = new FormData()
         formData.append("file", file)
         formData.append("scan_type", scanType)
+        formData.append("explain", explain.toString())
 
         try {
             const res = await fetch("/api/predict/image", {
@@ -363,6 +369,14 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                             </Alert>
                         )}
 
+                        <div className="flex items-center justify-between p-3 rounded-lg bg-accent/30 border border-primary/20">
+                            <div className="space-y-0.5">
+                                <Label className="text-sm font-medium">Explainable AI (XAI)</Label>
+                                <p className="text-[10px] text-muted-foreground italic">Generate visual heatmaps & uncertainty metrics</p>
+                            </div>
+                            <Switch checked={explain} onCheckedChange={setExplain} />
+                        </div>
+
                         <Button
                             className={cn(
                                 "w-full h-12 text-base font-semibold transition-all duration-300",
@@ -408,7 +422,7 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                         </CardDescription>
                     </CardHeader>
 
-                    <CardContent className="p-6 min-h-[400px] flex items-center justify-center">
+                    <CardContent className="p-6 min-h-[400px]">
                         {result ? (
                             <div className="w-full space-y-5 animate-in fade-in zoom-in-95 duration-500">
                                 {/* Auto-Correction Notice */}
@@ -432,6 +446,13 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                     <Badge className={cn("border", getSeverityColor(result.severity))}>
                                         {result.severity || "Unknown"} Severity
                                     </Badge>
+                                    {result.confidence_metrics && (
+                                        <ConfidenceBadge
+                                            confidence={result.confidence_metrics.confidence}
+                                            uncertainty={result.confidence_metrics.uncertainty_level}
+                                            reviewRequired={result.confidence_metrics.review_required}
+                                        />
+                                    )}
                                 </div>
 
                                 {/* Prediction Result */}
@@ -460,6 +481,18 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                         <h3 className="font-bold text-lg">{result.prediction}</h3>
                                         <p className="text-sm text-muted-foreground">AI Diagnosis</p>
                                     </div>
+                                    {result.triage && (
+                                        <div className="ml-auto text-right">
+                                            <Badge className={cn(
+                                                "text-[10px] uppercase font-bold",
+                                                result.triage.priority === 'high' ? 'bg-rose-500' :
+                                                    result.triage.priority === 'medium' ? 'bg-amber-500' : 'bg-blue-500'
+                                            )}>
+                                                {result.triage.priority} Priority
+                                            </Badge>
+                                            <p className="text-[9px] text-muted-foreground mt-0.5">{result.triage.triageNote}</p>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Confidence */}
@@ -470,20 +503,22 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                             {(result.confidence * 100).toFixed(1)}%
                                         </span>
                                     </div>
-                                    <div className="h-2.5 rounded-full bg-secondary overflow-hidden">
+                                    <div className="h-2 rounded-full bg-secondary overflow-hidden">
                                         <div
-                                            className={cn(
-                                                "h-full rounded-full transition-all duration-1000 ease-out",
-                                                result.severity === "Normal" || result.severity === "Low"
-                                                    ? "bg-gradient-to-r from-emerald-500 to-teal-400"
-                                                    : result.severity === "Critical" || result.severity === "High"
-                                                        ? "bg-gradient-to-r from-rose-500 to-red-400"
-                                                        : "bg-gradient-to-r from-amber-500 to-orange-400"
-                                            )}
+                                            className="h-full bg-primary"
                                             style={{ width: `${result.confidence * 100}%` }}
                                         />
                                     </div>
                                 </div>
+
+                                {/* XAI Heatmap Integration */}
+                                {result.explanation_url && preview && (
+                                    <HeatmapViewer
+                                        originalImage={preview}
+                                        heatmapUrl={`http://localhost:8000${result.explanation_url}`}
+                                        summary={result.explanation_text}
+                                    />
+                                )}
 
                                 {/* Findings */}
                                 {result.findings && result.findings.length > 0 && (
@@ -530,7 +565,6 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                 {/* Feedback Section (Continuous Learning) */}
                                 {result.id && !feedbackSent && (
                                     <div className="p-4 rounded-xl relative overflow-hidden group">
-                                        {/* Gradient Background */}
                                         <div className="absolute inset-0 bg-gradient-to-tr from-blue-500/10 via-purple-500/5 to-emerald-500/10 opacity-50" />
                                         <div className="relative z-10 space-y-3">
                                             <div className="flex items-center justify-between">
@@ -567,6 +601,7 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                         </div>
                                     </div>
                                 )}
+
                                 {feedbackSent && (
                                     <div className="p-3 rounded-lg bg-emerald-500/10 text-emerald-600 text-sm font-medium text-center border border-emerald-500/20 flex items-center justify-center gap-2 animate-in fade-in zoom-in-90">
                                         <CheckCircle2 className="h-4 w-4" />
@@ -574,7 +609,7 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                     </div>
                                 )}
 
-                                {/* Technical Details */}
+                                {/* Model Info */}
                                 <div className="p-3 rounded-xl bg-secondary/30 border border-border/50 space-y-2">
                                     <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Model Info</p>
                                     <div className="grid grid-cols-2 gap-2 text-xs">
@@ -625,7 +660,6 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                 <div className="space-y-2">
                                     <p className="font-medium">Awaiting Image</p>
                                     <p className="text-sm max-w-[280px] mx-auto">Upload a medical image and click "Analyze" to get AI predictions</p>
-                                    {/* Feature highlight */}
                                     <div className="flex items-center justify-center gap-2 text-xs text-primary/80 pt-2">
                                         <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
                                         <span>Continuous Learning Enabled</span>
@@ -635,7 +669,7 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                         )}
                     </CardContent>
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     )
 }

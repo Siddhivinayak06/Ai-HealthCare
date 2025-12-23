@@ -25,18 +25,27 @@ def analyze_report_endpoint(data: NLPRequest):
 
         # 1. Extract Entities (BioBERT)
         raw_entities = extract_medical_entities(text)
-        entities = [
-            NLPEntity(text=e["text"], label=e["label"], confidence=e["confidence"])
-            for e in raw_entities
-        ]
+        
+        entities = []
+        if isinstance(raw_entities, dict):
+            for cat, items in raw_entities.items():
+                if isinstance(items, list):
+                    for e in items:
+                        entities.append(NLPEntity(
+                            text=e["text"], 
+                            label=e.get("raw_label", cat), 
+                            confidence=e["confidence"]
+                        ))
 
         # 2. Generate Insight (BART)
-        insight = get_doctor_patient_insight(text, raw_entities)
+        from src.nlp.summarizer import generate_clinical_summary
+        summary = generate_clinical_summary(text)
+        insight = get_doctor_patient_insight(raw_entities, summary)
 
         return NLPResponse(
-            summary=insight["summary"],
+            summary=summary,
             entities=entities,
-            doctor_insights=insight["doctor_patient_brief"],
+            doctor_insights=insight,
             processing_time=time.time() - start_time
         )
     except Exception as e:

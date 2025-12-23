@@ -28,9 +28,10 @@ const navigation = [
   { name: "Reports", href: "/reports", icon: FileTextIcon },
   { name: "Prescriptions", href: "/prescriptions", icon: PillIcon },
   { name: "Appointments", href: "/appointments", icon: CalendarIcon },
+  { name: "AI Governance", href: "/model-monitoring", icon: ShieldIcon },
   { name: "Activity", href: "/activity", icon: ActivityIcon },
 ]
-import { PillIcon } from "lucide-react"
+import { PillIcon, ShieldIcon } from "lucide-react"
 
 type SidebarProps = {
   user?: {

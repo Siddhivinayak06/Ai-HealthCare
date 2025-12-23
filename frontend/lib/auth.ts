@@ -1,141 +1,115 @@
-import { cookies } from "next/headers"
-import { redirect } from "next/navigation"
+import { SignJWT, jwtVerify } from "jose";
+import { cookies } from "next/headers";
+import { NextRequest, NextResponse } from "next/server";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
-const COOKIE_NAME = "medai_session"
-const SESSION_DURATION = 7 * 24 * 60 * 60 * 1000 // 7 days
+const secretKey = "secret";
+const key = new TextEncoder().encode(process.env.JWT_SECRET || secretKey);
 
-export type User = {
-  id: string
-  email: string
-  name: string | null
-  role: string
-  created_at: string
-  updated_at?: string
+export async function encrypt(payload: any) {
+  return await new SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("2h")
+    .sign(key);
 }
 
-export async function createUser(
-  email: string,
-  password: string,
-  name?: string,
-  role?: string
-): Promise<{ success: boolean; error?: string; user?: User; token?: string }> {
-  try {
-    const res = await fetch(`${API_URL}/auth/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, name, role }),
-    })
-
-    const data = await res.json()
-
-    if (!res.ok) {
-      return { success: false, error: data.message || "Registration failed" }
-    }
-
-    return { success: true, user: data, token: data.token }
-  } catch (error) {
-    console.error("Error creating user:", error)
-    return { success: false, error: "Network error" }
-  }
+export async function decrypt(input: string): Promise<any> {
+  const { payload } = await jwtVerify(input, key, {
+    algorithms: ["HS256"],
+  });
+  return payload;
 }
 
-export async function authenticateUser(
-  email: string,
-  password: string
-): Promise<{ success: boolean; error?: string; user?: User; token?: string }> {
-  try {
-    const res = await fetch(`${API_URL}/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    })
+export async function login(user: { id: string; email: string; role: string }) {
+  // Create the session
+  const expires = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours
+  const session = await encrypt({ ...user, expires });
 
-    const data = await res.json()
-
-    if (!res.ok) {
-      return { success: false, error: data.message || "Login failed" }
-    }
-
-    return { success: true, user: data, token: data.token }
-  } catch (error) {
-    console.error("Error authenticating user:", error)
-    return { success: false, error: "Network error" }
-  }
-}
-
-export async function createSession(token: string): Promise<void> {
-  const cookieStore = await cookies()
-  cookieStore.set(COOKIE_NAME, token, {
+  // Save the session in a cookie
+  const cookieStore = await cookies();
+  cookieStore.set("auth_token", session, {
+    expires,
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_DURATION / 1000,
-  })
+    path: "/"
+  });
 }
 
-export async function setSessionCookie(token: string): Promise<void> {
-  // Alias for createSession to maintain compatibility if needed, or just use createSession
-  return createSession(token);
+export async function logout() {
+  // Destroy the session
+  const cookieStore = await cookies();
+  cookieStore.set("auth_token", "", { expires: new Date(0), path: "/" });
 }
 
-export async function getSession(): Promise<{ user: User | null }> {
-  const cookieStore = await cookies()
-  const token = cookieStore.get(COOKIE_NAME)?.value
+export async function getSession() {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("auth_token")?.value;
+  if (!session) return null;
+  return await decrypt(session);
+}
 
-  if (!token) return { user: null }
+export async function updateSession(request: NextRequest) {
+  const session = request.cookies.get("auth_token")?.value;
+  if (!session) return;
 
-  try {
-    const res = await fetch(`${API_URL}/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+  // Refresh the session so it doesn't expire
+  const parsed = await decrypt(session);
+  parsed.expires = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  const res = NextResponse.next();
+  res.cookies.set({
+    name: "auth_token",
+    value: await encrypt(parsed),
+    httpOnly: true,
+    expires: parsed.expires,
+    path: "/"
+  });
+  return res;
+}
 
-    if (!res.ok) return { user: null }
+// Session user type
+export interface SessionUser {
+  id: string;
+  email: string;
+  role: string;
+}
 
-    const user = await res.json()
-    return { user }
-  } catch (error) {
-    return { user: null }
+/**
+ * Require authentication for API Route Handlers.
+ * Throws an error if user is not authenticated.
+ * @returns The authenticated user's session data
+ */
+export async function requireAuth(): Promise<SessionUser> {
+  const session = await getSession();
+  if (!session) {
+    throw new Error('Unauthorized');
   }
+  return {
+    id: session.id as string,
+    email: session.email as string,
+    role: session.role as string
+  };
 }
 
-export async function deleteSession(): Promise<void> {
-  const cookieStore = await cookies()
-  cookieStore.delete(COOKIE_NAME)
-}
-
-export async function requestPasswordReset(email: string): Promise<{ success: boolean; error?: string; message?: string }> {
-  try {
-    const res = await fetch(`${API_URL}/auth/forgot-password`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      return { success: false, error: data.message || "Failed to send reset email" };
-    }
-    return { success: true, message: data.data };
-  } catch (error) {
-    return { success: false, error: "Network error" };
+/**
+ * Require specific role(s) for API Route Handlers.
+ * Throws an error if user doesn't have required role.
+ * @param allowedRoles - Array of roles that are permitted
+ * @returns The authenticated user's session data
+ */
+export async function requireRole(allowedRoles: string[]): Promise<SessionUser> {
+  const user = await requireAuth();
+  if (!allowedRoles.includes(user.role)) {
+    throw new Error('Forbidden');
   }
+  return user;
 }
 
-export async function performPasswordReset(token: string, password: string): Promise<{ success: boolean; error?: string; message?: string }> {
-  try {
-    const res = await fetch(`${API_URL}/auth/reset-password`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, password }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      return { success: false, error: data.message || "Failed to reset password" };
-    }
-    return { success: true, message: data.data };
-  } catch (error) {
-    return { success: false, error: "Network error" };
-  }
+/**
+ * Helper to create standardized error responses for Route Handlers
+ */
+export function authErrorResponse(error: unknown): Response {
+  const message = error instanceof Error ? error.message : 'Unknown error';
+  const status = message === 'Unauthorized' ? 401 : message === 'Forbidden' ? 403 : 500;
+  return Response.json({ message }, { status });
 }
-
