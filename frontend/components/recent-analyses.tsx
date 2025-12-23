@@ -10,6 +10,7 @@ interface Analysis {
   type: string
   status: "completed" | "processing" | "pending"
   confidence: number
+  severity: "normal" | "low" | "moderate" | "high" | "critical"
   finding: string
   timestamp: string
 }
@@ -33,56 +34,61 @@ export async function RecentAnalyses() {
   const displayAnalyses: Analysis[] =
     analyses.length > 0
       ? analyses.map((a) => ({
-          id: a.id,
-          patientName:
-            (a as { first_name?: string; last_name?: string }).first_name &&
+        id: a.id,
+        patientName:
+          (a as { first_name?: string; last_name?: string }).first_name &&
             (a as { first_name?: string; last_name?: string }).last_name
-              ? `${(a as { first_name?: string }).first_name} ${(a as { last_name?: string }).last_name}`
-              : "Unknown Patient",
-          type: a.scan_type,
-          status: (a.status as "completed" | "processing" | "pending") || "completed",
-          confidence: a.confidence || 0,
-          finding: a.diagnosis || "Analysis complete",
-          timestamp: formatTime(a.created_at),
-        }))
+            ? `${(a as { first_name?: string }).first_name} ${(a as { last_name?: string }).last_name}`
+            : "Unknown Patient",
+        type: a.scan_type,
+        status: (a.status as "completed" | "processing" | "pending") || "completed",
+        confidence: a.confidence || 0,
+        severity: (a.severity?.toLowerCase() as any) || "normal",
+        finding: a.diagnosis || "Analysis complete",
+        timestamp: formatTime(a.created_at),
+      }))
       : [
-          {
-            id: "1",
-            patientName: "Sarah Johnson",
-            type: "Chest X-Ray",
-            status: "completed" as const,
-            confidence: 94,
-            finding: "No abnormalities detected",
-            timestamp: "2m ago",
-          },
-          {
-            id: "2",
-            patientName: "Michael Chen",
-            type: "Brain MRI",
-            status: "completed" as const,
-            confidence: 87,
-            finding: "Minor calcification noted",
-            timestamp: "15m ago",
-          },
-          {
-            id: "3",
-            patientName: "Emily Davis",
-            type: "CT Scan",
-            status: "processing" as const,
-            confidence: 0,
-            finding: "Processing...",
-            timestamp: "23m ago",
-          },
-          {
-            id: "4",
-            patientName: "James Wilson",
-            type: "X-Ray",
-            status: "completed" as const,
-            confidence: 91,
-            finding: "No significant findings",
-            timestamp: "1h ago",
-          },
-        ]
+        {
+          id: "1",
+          patientName: "Sarah Johnson",
+          type: "Chest X-Ray",
+          status: "completed" as const,
+          confidence: 94,
+          severity: "normal" as const,
+          finding: "No abnormalities detected",
+          timestamp: "2m ago",
+        },
+        {
+          id: "2",
+          patientName: "Michael Chen",
+          type: "Brain MRI",
+          status: "completed" as const,
+          confidence: 87,
+          severity: "moderate" as const,
+          finding: "Minor calcification noted",
+          timestamp: "15m ago",
+        },
+        {
+          id: "3",
+          patientName: "Emily Davis",
+          type: "CT Scan",
+          status: "processing" as const,
+          confidence: 0,
+          severity: "low" as const,
+          finding: "Processing...",
+          timestamp: "23m ago",
+        },
+        {
+          id: "4",
+          patientName: "James Wilson",
+          type: "X-Ray",
+          status: "completed" as const,
+          confidence: 91,
+          severity: "high" as const,
+          finding: "No significant findings",
+          timestamp: "1h ago",
+        },
+      ]
 
   return (
     <BentoCard size="lg">
@@ -127,10 +133,26 @@ export async function RecentAnalyses() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <p className="font-semibold text-card-foreground truncate">{analysis.patientName}</p>
-                <span className="text-xs text-muted-foreground">•</span>
-                <span className="text-xs text-muted-foreground">{analysis.type}</span>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[10px] h-4 px-1.5 font-bold",
+                    analysis.status === "processing" ? "border-slate-500 text-slate-500" :
+                      (analysis.severity === "high" || analysis.severity === "critical") ? "border-rose-500/50 bg-rose-500/10 text-rose-500" :
+                        (analysis.severity === "moderate") ? "border-orange-500/50 bg-orange-500/10 text-orange-500" :
+                          "border-emerald-500/50 bg-emerald-500/10 text-emerald-500"
+                  )}
+                >
+                  {analysis.status === "processing" ? "Pending" :
+                    (analysis.severity === "high" || analysis.severity === "critical") ? "🔴 CRITICAL" :
+                      (analysis.severity === "moderate") ? "🟠 MODERATE" : "🟢 STABLE"}
+                </Badge>
               </div>
-              <p className="text-sm text-muted-foreground truncate mt-0.5">{analysis.finding}</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-xs text-muted-foreground">{analysis.type}</span>
+                <span className="text-xs text-muted-foreground">•</span>
+                <p className="text-sm text-muted-foreground truncate">{analysis.finding}</p>
+              </div>
             </div>
 
             {/* Stats */}

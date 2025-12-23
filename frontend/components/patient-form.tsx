@@ -78,7 +78,7 @@ export function PatientForm({
 
   useEffect(() => {
     if (selectedPatient) {
-      const birthDate = new Date(selectedPatient.date_of_birth)
+      const birthDate = new Date(selectedPatient.dateOfBirth || new Date())
       const today = new Date()
       let age = today.getFullYear() - birthDate.getFullYear()
       const m = today.getMonth() - birthDate.getMonth()
@@ -94,8 +94,24 @@ export function PatientForm({
     }
   }, [selectedPatient])
 
-  const handleInputChange = (field: keyof PatientData, value: string | number) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
+  const handleInputChange = (field: keyof PatientData, value: any) => {
+    // If it's a numeric field and the value is empty, treat as undefined or null to show 0 or empty in UI
+    // but the state Expects a number. We'll handle the parsing here to be safe.
+    const numericFields: (keyof PatientData)[] = [
+      "age", "weight", "height", "bloodPressureSystolic", "bloodPressureDiastolic",
+      "heartRate", "bloodSugar", "cholesterolTotal", "cholesterolHDL", "cholesterolLDL"
+    ]
+
+    let finalValue = value
+    if (numericFields.includes(field)) {
+      if (value === "" || value === null || value === undefined) {
+        finalValue = 0 // Default to 0 instead of NaN
+      } else if (typeof value === "string") {
+        finalValue = Number.parseInt(value) || 0
+      }
+    }
+
+    setFormData((prev) => ({ ...prev, [field]: finalValue }))
   }
 
   const handleFamilyHistoryChange = (condition: string, checked: boolean) => {
@@ -156,10 +172,14 @@ export function PatientForm({
               {mode === "create" ? "New Patient Profile" : "Patient Health Data"}
             </CardTitle>
             {selectedPatient && (
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary" className="bg-primary/10 text-primary">
-                  {selectedPatient.first_name} {selectedPatient.last_name}
-                </Badge>
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
+                  {selectedPatient.firstName[0]}{selectedPatient.lastName[0]}
+                </div>
+                <div>
+                  <p className="font-semibold">{selectedPatient.firstName} {selectedPatient.lastName}</p>
+                  <p className="text-xs text-muted-foreground">Patient ID: {selectedPatient.id.slice(0, 8)}...</p>
+                </div>
                 <Button type="button" variant="ghost" size="sm" onClick={onClearPatient} className="h-6 w-6 p-0">
                   <XIcon className="h-4 w-4" />
                 </Button>
@@ -251,8 +271,8 @@ export function PatientForm({
                 <Input
                   id="bpSystolic"
                   type="number"
-                  value={formData.bloodPressureSystolic}
-                  onChange={(e) => handleInputChange("bloodPressureSystolic", Number.parseInt(e.target.value))}
+                  value={formData.bloodPressureSystolic === 0 ? "" : formData.bloodPressureSystolic}
+                  onChange={(e) => handleInputChange("bloodPressureSystolic", e.target.value)}
                   className="bg-background/50"
                 />
               </div>
@@ -261,8 +281,8 @@ export function PatientForm({
                 <Input
                   id="bpDiastolic"
                   type="number"
-                  value={formData.bloodPressureDiastolic}
-                  onChange={(e) => handleInputChange("bloodPressureDiastolic", Number.parseInt(e.target.value))}
+                  value={formData.bloodPressureDiastolic === 0 ? "" : formData.bloodPressureDiastolic}
+                  onChange={(e) => handleInputChange("bloodPressureDiastolic", e.target.value)}
                   className="bg-background/50"
                 />
               </div>
@@ -271,8 +291,8 @@ export function PatientForm({
                 <Input
                   id="heartRate"
                   type="number"
-                  value={formData.heartRate}
-                  onChange={(e) => handleInputChange("heartRate", Number.parseInt(e.target.value))}
+                  value={formData.heartRate === 0 ? "" : formData.heartRate}
+                  onChange={(e) => handleInputChange("heartRate", e.target.value)}
                   className="bg-background/50"
                 />
               </div>
@@ -281,8 +301,8 @@ export function PatientForm({
                 <Input
                   id="bloodSugar"
                   type="number"
-                  value={formData.bloodSugar}
-                  onChange={(e) => handleInputChange("bloodSugar", Number.parseInt(e.target.value))}
+                  value={formData.bloodSugar === 0 ? "" : formData.bloodSugar}
+                  onChange={(e) => handleInputChange("bloodSugar", e.target.value)}
                   className="bg-background/50"
                 />
               </div>
@@ -298,8 +318,8 @@ export function PatientForm({
                 <Input
                   id="cholTotal"
                   type="number"
-                  value={formData.cholesterolTotal}
-                  onChange={(e) => handleInputChange("cholesterolTotal", Number.parseInt(e.target.value))}
+                  value={formData.cholesterolTotal === 0 ? "" : formData.cholesterolTotal}
+                  onChange={(e) => handleInputChange("cholesterolTotal", e.target.value)}
                   className="bg-background/50"
                 />
               </div>
@@ -308,8 +328,8 @@ export function PatientForm({
                 <Input
                   id="cholHDL"
                   type="number"
-                  value={formData.cholesterolHDL}
-                  onChange={(e) => handleInputChange("cholesterolHDL", Number.parseInt(e.target.value))}
+                  value={formData.cholesterolHDL === 0 ? "" : formData.cholesterolHDL}
+                  onChange={(e) => handleInputChange("cholesterolHDL", e.target.value)}
                   className="bg-background/50"
                 />
               </div>
@@ -318,8 +338,8 @@ export function PatientForm({
                 <Input
                   id="cholLDL"
                   type="number"
-                  value={formData.cholesterolLDL}
-                  onChange={(e) => handleInputChange("cholesterolLDL", Number.parseInt(e.target.value))}
+                  value={formData.cholesterolLDL === 0 ? "" : formData.cholesterolLDL}
+                  onChange={(e) => handleInputChange("cholesterolLDL", e.target.value)}
                   className="bg-background/50"
                 />
               </div>

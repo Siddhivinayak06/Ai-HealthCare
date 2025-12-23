@@ -1,3 +1,4 @@
+import torch
 from .mc_dropout import get_mc_predictions
 from .uncertainty import calculate_uncertainty
 

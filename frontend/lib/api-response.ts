@@ -33,15 +33,12 @@ export function errorResponse(
     status = 500,
     options?: { code?: string; details?: unknown }
 ): NextResponse<ErrorResponse> {
+    const errorObj: ErrorResponse["error"] = { message };
+    if (options?.code) errorObj.code = options.code;
+    if (options?.details) errorObj.details = options.details;
+
     return NextResponse.json(
-        {
-            success: false,
-            error: {
-                message,
-                ...(options?.code && { code: options.code }),
-                ...(options?.details && { details: options.details }),
-            },
-        },
+        { success: false as const, error: errorObj },
         { status }
     );
 }

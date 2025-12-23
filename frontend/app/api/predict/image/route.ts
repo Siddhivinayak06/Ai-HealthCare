@@ -64,6 +64,13 @@ export async function POST(req: NextRequest) {
         const mlFormData = new FormData();
         mlFormData.append("file", file);
 
+        // Forward other fields like scan_type, explain
+        for (const [key, value] of formData.entries()) {
+            if (key !== "file") {
+                mlFormData.append(key, value);
+            }
+        }
+
         // ==================== Performance: Request Timeout ====================
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), ML_TIMEOUT_MS);
@@ -91,7 +98,8 @@ export async function POST(req: NextRequest) {
             }
 
             const data = await response.json();
-            return NextResponse.json({ success: true, data });
+            // Return data directly to match frontend expectations
+            return NextResponse.json(data);
         } catch (fetchError) {
             clearTimeout(timeout);
             const error = fetchError as Error;

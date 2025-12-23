@@ -14,3 +14,4 @@ transformers
 pymupdf
 spacy
 datasets
+tf-keras

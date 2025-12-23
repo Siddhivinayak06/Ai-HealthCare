@@ -3,7 +3,7 @@ import { cookies } from "next/headers"
 export async function POST(request: Request) {
     try {
         const cookieStore = await cookies()
-        const token = cookieStore.get("medai_session")?.value
+        const token = cookieStore.get("auth_token")?.value
 
         // Ideally check for admin/doctor role here, but we rely on token + frontend gating for this demo
         if (!token) {

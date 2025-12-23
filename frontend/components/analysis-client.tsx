@@ -84,7 +84,6 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
 
             const { saveImageAnalysis } = await import("@/app/actions/analysis")
             const response = await saveImageAnalysis(apiData)
-
             if (response.error) throw new Error(response.error)
             setSaveMessage("Saved to patient record!")
         } catch (error) {
@@ -115,12 +114,18 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                 throw new Error("Failed to analyze image")
             }
 
-            const data = await res.json()
-            setResult(data)
+            const responseJson = await res.json()
+            let resultData = responseJson
+
+            if (responseJson.success && responseJson.data) {
+                resultData = responseJson.data
+            }
+
+            setResult(resultData)
 
             // Auto-switch tab if corrected
-            if (data.auto_corrected && data.scan_type) {
-                const correctedType = data.scan_type.toLowerCase()
+            if (resultData.auto_corrected && resultData.scan_type) {
+                const correctedType = resultData.scan_type.toLowerCase()
                 if (correctedType.includes("x-ray")) setScanType("xray")
                 else if (correctedType.includes("ct")) setScanType("ct")
                 else if (correctedType.includes("mri")) setScanType("mri")
@@ -157,7 +162,8 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     image_id: result.id,
-                    scan_type: result.scan_type.toLowerCase() === "x-ray" ? "xray" : result.scan_type.toLowerCase().replace(" ", ""), // Normalize 'X-Ray' -> 'xray', 'CT Scan' -> 'ctscan' -> wait, backend uses 'ct'
+                    scan_type: result.scan_type.toLowerCase().includes("x-ray") ? "xray" :
+                        result.scan_type.toLowerCase().includes("ct") ? "ct" : "mri",
                     correct_label: correctLabel
                 })
             })

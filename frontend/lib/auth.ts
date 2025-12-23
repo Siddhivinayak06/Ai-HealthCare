@@ -15,8 +15,12 @@ const SESSION_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours
 export interface SessionUser {
   id: string;
   email: string;
+  name?: string | null;
   role: string;
 }
+
+// Backward compatibility alias
+export type User = SessionUser;
 
 interface SessionPayload extends SessionUser {
   expires: string;
@@ -71,25 +75,33 @@ export async function logout() {
 }
 
 /**
- * Get the current session, returns null if expired or invalid
+ * Get the current session, returns { user: null } if expired or invalid
+ * Returns { user: SessionUser } if valid session exists
  */
-export async function getSession(): Promise<SessionPayload | null> {
+export async function getSession(): Promise<{ user: SessionUser | null }> {
   const cookieStore = await cookies();
   const session = cookieStore.get("auth_token")?.value;
-  if (!session) return null;
+  if (!session) return { user: null };
 
   try {
     const parsed = await decrypt(session);
 
     // Check if session is expired (defense in depth)
     if (parsed.expires && new Date(parsed.expires) < new Date()) {
-      return null;
+      return { user: null };
     }
 
-    return parsed;
+    return {
+      user: {
+        id: parsed.id,
+        email: parsed.email,
+        name: parsed.name,
+        role: parsed.role,
+      },
+    };
   } catch {
     // Token invalid or expired
-    return null;
+    return { user: null };
   }
 }
 
@@ -130,15 +142,11 @@ export async function updateSession(request: NextRequest) {
  * Throws an error if user is not authenticated.
  */
 export async function requireAuth(): Promise<SessionUser> {
-  const session = await getSession();
-  if (!session) {
+  const { user } = await getSession();
+  if (!user) {
     throw new Error("Unauthorized");
   }
-  return {
-    id: session.id,
-    email: session.email,
-    role: session.role,
-  };
+  return user;
 }
 
 /**

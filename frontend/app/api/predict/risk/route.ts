@@ -11,8 +11,8 @@ export async function POST(req: NextRequest) {
         }
 
         const body = await req.json();
-
-        const response = await fetch(`${ML_SERVICE_URL}/predict/risk`, {
+        const url = `${ML_SERVICE_URL}/predict/risk`;
+        const response = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
