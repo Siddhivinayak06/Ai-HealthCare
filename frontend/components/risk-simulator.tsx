@@ -8,9 +8,12 @@ import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { Zap, Activity, Heart, AlertTriangle, TrendingDown, TrendingUp, Sparkles } from "lucide-react"
+import { Zap, Activity, Heart, AlertTriangle, TrendingDown, TrendingUp, Sparkles, Filter, ShieldCheck, Stethoscope } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { PatientSelector } from "@/components/patient-selector"
+import { useEffect, useCallback } from "react"
+import { getHistoricalTrendsForPatient } from "@/app/actions/analyses"
+import { PatientTrendChart } from "@/components/patient-trend-chart"
 
 interface SimulationData {
     age: number
@@ -30,6 +33,8 @@ interface PredictionResult {
 
 export function RiskSimulator() {
     const [loading, setLoading] = useState(false)
+    const [isRealtime, setIsRealtime] = useState(true)
+    const [historyData, setHistoryData] = useState<any[]>([])
     const [data, setData] = useState<SimulationData>({
         age: 45,
         bmi: 24,
@@ -40,38 +45,57 @@ export function RiskSimulator() {
         smoker: false,
     })
 
-    const [result, setResult] = useState<PredictionResult | null>(null)
+    const [result, setResult] = useState<any | null>(null)
 
-    const handleSimulate = async () => {
+    const handleSimulate = useCallback(async (currentData = data) => {
         setLoading(true)
         try {
             const response = await fetch("/api/predict/risk", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    ...data,
-                    smoker: data.smoker ? 1 : 0,
+                    ...currentData,
+                    smoker: currentData.smoker ? 1 : 0,
                 }),
             })
 
             if (response.ok) {
                 const resData = await response.json()
                 setResult(resData)
-            } else {
-                console.error("Simulation failed")
             }
         } catch (error) {
             console.error("Error simulating risk:", error)
         } finally {
             setLoading(false)
         }
-    }
+    }, [data])
+
+    // Real-time Simulation with Debounce
+    useEffect(() => {
+        if (!isRealtime) return
+
+        const timeoutId = setTimeout(() => {
+            handleSimulate()
+        }, 800) // 800ms debounce
+
+        return () => clearTimeout(timeoutId)
+    }, [data, isRealtime, handleSimulate])
 
     const [selectedPatientId, setSelectedPatientId] = useState<string>("")
     const [saving, setSaving] = useState(false)
     const [saveMessage, setSaveMessage] = useState("")
 
     // Dynamically import action to avoid build cycle if any
+    const handlePatientChange = async (id: string) => {
+        setSelectedPatientId(id)
+        if (id) {
+            const trends = await getHistoricalTrendsForPatient(id)
+            setHistoryData(trends)
+        } else {
+            setHistoryData([])
+        }
+    }
+
     const handleSave = async () => {
         if (!selectedPatientId || !result) return
         setSaving(true)
@@ -80,23 +104,21 @@ export function RiskSimulator() {
         try {
             const apiData = {
                 patientId: selectedPatientId,
-                condition: "Cardiovascular Risk",
+                condition: "Cardiovascular Risk Simulation",
                 riskScore: result.risk_score,
                 severity: result.risk_level,
-                contributingFactors: {
-                    age: data.age,
-                    bmi: data.bmi,
-                    smoker: data.smoker,
-                    bp: `${data.sys_bp}/${data.dia_bp}`
-                },
-                recommendations: result.recommendation
+                contributingFactors: JSON.stringify(result.factors || []),
+                recommendations: JSON.stringify(result.recommendation || [])
             }
 
             const { saveRiskPrediction } = await import("@/app/actions/analysis")
             const response = await saveRiskPrediction(apiData)
 
-            if (response.error) throw new Error(response.error)
+            if (!response.success) throw new Error(response.error)
             setSaveMessage("Saved to patient record!")
+
+            // Refresh history
+            handlePatientChange(selectedPatientId)
         } catch (error) {
             setSaveMessage("Failed to save.")
         } finally {
@@ -145,18 +167,28 @@ export function RiskSimulator() {
                             Simulate lifestyle changes to see their impact on your health risk score
                         </CardDescription>
                     </div>
-                    <Button
-                        onClick={handleSimulate}
-                        disabled={loading}
-                        className="bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white border-0 shadow-lg shadow-violet-500/25 transition-all duration-300 hover:shadow-violet-500/40 hover:scale-105"
-                    >
-                        {loading ? (
-                            <Zap className="mr-2 h-4 w-4 animate-pulse" />
-                        ) : (
-                            <Zap className="mr-2 h-4 w-4" />
-                        )}
-                        {loading ? "Simulating..." : "Run Simulation"}
-                    </Button>
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
+                            <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Real-time</span>
+                            <Switch
+                                checked={isRealtime}
+                                onCheckedChange={setIsRealtime}
+                                className="scale-75 data-[state=checked]:bg-violet-500"
+                            />
+                        </div>
+                        <Button
+                            onClick={() => handleSimulate()}
+                            disabled={loading || isRealtime}
+                            className="bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white border-0 shadow-lg shadow-violet-500/25 transition-all duration-300 hover:shadow-violet-500/40 hover:scale-105"
+                        >
+                            {loading ? (
+                                <Zap className="mr-2 h-4 w-4 animate-pulse" />
+                            ) : (
+                                <Zap className="mr-2 h-4 w-4" />
+                            )}
+                            {loading ? "Simulating..." : "Run Simulation"}
+                        </Button>
+                    </div>
                 </div>
             </CardHeader>
 
@@ -348,31 +380,76 @@ export function RiskSimulator() {
                             </div>
 
                             {/* Recommendations */}
-                            <div className="space-y-3 pt-2">
-                                <h4 className="font-semibold text-white flex items-center gap-2">
-                                    <Heart className="h-4 w-4 text-rose-400" />
-                                    AI Recommendations
+                            {/* Contributing Factors */}
+                            {result.factors && result.factors.length > 0 && (
+                                <div className="space-y-3 w-full">
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                        <Filter className="h-3 w-3 text-violet-400" />
+                                        Primary Clinical Factors
+                                    </h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        {result.factors.map((factor: string, idx: number) => (
+                                            <Badge key={idx} variant="outline" className="bg-violet-500/10 border-violet-500/30 text-violet-300 py-1 px-3">
+                                                {factor}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Recommendations */}
+                            <div className="space-y-3 pt-2 w-full">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                    <Stethoscope className="h-3 w-3 text-rose-400" />
+                                    Actionable Interventions
                                 </h4>
                                 <ul className="space-y-2">
-                                    {result.recommendation.map((rec, idx) => (
-                                        <li
-                                            key={idx}
-                                            className="flex items-start gap-3 text-sm text-slate-300 p-3 rounded-lg bg-white/5 border border-white/10 animate-in slide-in-from-left duration-300"
-                                            style={{ animationDelay: `${idx * 100}ms` }}
-                                        >
-                                            <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-                                            {rec}
-                                        </li>
+                                    {result.recommendation.map((rec: any, idx: number) => (
+                                        <div key={idx} className="space-y-2">
+                                            <li
+                                                className="group flex items-start gap-3 text-sm text-slate-300 p-3 rounded-xl bg-white/5 border border-white/5 hover:border-violet-500/30 hover:bg-white/[0.08] transition-all duration-300 animate-in slide-in-from-left duration-300"
+                                                style={{ animationDelay: `${idx * 100}ms` }}
+                                            >
+                                                <span className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 group-hover:scale-110 transition-transform">
+                                                    <ShieldCheck className="h-3.5 w-3.5" />
+                                                </span>
+                                                <span className="pt-0.5 leading-relaxed flex-1">{rec.text}</span>
+                                            </li>
+                                            {rec.action === "appointment" && (
+                                                <Button
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    className="w-full h-8 text-xs bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 border border-violet-500/20 gap-2"
+                                                    onClick={async () => {
+                                                        const { createAppointment } = await import("@/app/actions/appointments")
+                                                        const now = new Date()
+                                                        const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+                                                        await createAppointment({
+                                                            patientId: selectedPatientId || "draft",
+                                                            title: `AI Referral: ${rec.text.split(':')[0]}`,
+                                                            startTime: nextWeek.toISOString(),
+                                                            endTime: new Date(nextWeek.getTime() + 30 * 60 * 1000).toISOString(),
+                                                            notes: `AI Risk Assessment recommended: ${rec.text}`,
+                                                            type: "specialist"
+                                                        })
+                                                        setSaveMessage("Referral scheduled for next week!")
+                                                    }}
+                                                >
+                                                    <Stethoscope className="h-3 w-3" />
+                                                    Schedule Follow-up
+                                                </Button>
+                                            )}
+                                        </div>
                                     ))}
                                 </ul>
                             </div>
 
                             <div className="pt-4 space-y-3 border-t border-white/10">
                                 <div className="space-y-1">
-                                    <p className="text-sm font-medium text-slate-300">Save to Patient Record</p>
+                                    <p className="text-sm font-medium text-slate-300">Target Patient</p>
                                     <div className="flex gap-2">
                                         <div className="flex-1">
-                                            <PatientSelector onSelect={setSelectedPatientId} />
+                                            <PatientSelector onSelect={handlePatientChange} />
                                         </div>
                                         <Button
                                             onClick={handleSave}
@@ -383,6 +460,12 @@ export function RiskSimulator() {
                                         </Button>
                                     </div>
                                 </div>
+
+                                {historyData.length > 0 && (
+                                    <div className="pt-4 border-t border-white/10">
+                                        <PatientTrendChart data={historyData} />
+                                    </div>
+                                )}
                                 {saveMessage && (
                                     <p className={cn("text-xs", saveMessage.includes("Saved") ? "text-emerald-400" : "text-rose-400")}>
                                         {saveMessage}

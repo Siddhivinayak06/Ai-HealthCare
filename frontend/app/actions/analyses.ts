@@ -354,3 +354,94 @@ export async function getLatestScanForPatient(patientId: string, beforeScanId?: 
     return null
   }
 }
+/**
+ * Fetches historical clinical data for a patient to build trend charts.
+ */
+export async function getHistoricalTrendsForPatient(patientId: string) {
+  try {
+    await requireUser()
+
+    // 1. Get Image Analysis History
+    const imageHistory = await db
+      .select({
+        date: scans.createdAt,
+        type: scans.scanType,
+        score: diagnoses.confidenceScore, // Using confidence as a marker for image clarity/severity
+        label: diagnoses.predictedCondition
+      })
+      .from(scans)
+      .innerJoin(diagnoses, eq(scans.id, diagnoses.scanId))
+      .where(eq(scans.patientId, patientId))
+      .orderBy(desc(scans.createdAt))
+
+    // 2. Get Risk Prediction History
+    const riskHistory = await db
+      .select({
+        date: riskPredictions.createdAt,
+        type: riskPredictions.condition,
+        score: riskPredictions.riskScore,
+        label: riskPredictions.severity
+      })
+      .from(riskPredictions)
+      .where(eq(riskPredictions.patientId, patientId))
+      .orderBy(desc(riskPredictions.createdAt))
+
+    // 3. Merge and Format
+    const combined = [
+      ...imageHistory.map(h => ({
+        date: h.date?.toISOString(),
+        category: 'Imaging',
+        value: parseFloat(h.score || '0') * 100, // Normalize to 0-100
+        label: h.label,
+        sub: h.type
+      })),
+      ...riskHistory.map(h => ({
+        date: h.date?.toISOString(),
+        category: 'Risk',
+        value: parseFloat(h.score || '0') * 100,
+        label: h.label,
+        sub: h.type
+      }))
+    ].sort((a, b) => new Date(a.date!).getTime() - new Date(b.date!).getTime())
+
+    return combined
+  } catch (error) {
+    console.error("Trend fetch error:", error)
+    return []
+  }
+}
+/**
+ * Uses AI to compare two imaging results and generate a progress note.
+ */
+export async function compareImagingTrends(oldData: any, newData: any) {
+  try {
+    const { user } = await getSession()
+    if (!user) throw new Error("Not authorized")
+
+    const { generateText } = await import("ai")
+
+    const prompt = `You are a radiologist assistant. Compare these two ${newData.scanType} analysis results for the same patient and write a concise clinical progress note (2 sentences max).
+    
+    PREVIOUS SCAN (${new Date(oldData.createdAt).toLocaleDateString()}):
+    - Diagnosis: ${oldData.diagnosis}
+    - Severity: ${oldData.severity}
+    - Findings: ${oldData.findings?.details?.join(", ") || "None"}
+    
+    CURRENT SCAN (Today):
+    - Diagnosis: ${newData.diagnosis}
+    - Severity: ${newData.severity}
+    - Findings: ${newData.findings?.details?.join(", ") || newData.findings?.join(", ") || "None"}
+    
+    Focus on whether the condition is improving, stable, or worsening. Avoid medical jargon where possible but stay professional.`
+
+    const { text } = await generateText({
+      model: "google/gemini-1.5-flash", // Using a fast, cheap model for quick notes
+      prompt,
+    })
+
+    return { success: true, summary: text.trim() }
+  } catch (error) {
+    console.error("Comparison analysis error:", error)
+    return { success: false, summary: "Could not generate comparative progress note." }
+  }
+}

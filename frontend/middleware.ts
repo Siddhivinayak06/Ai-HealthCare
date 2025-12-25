@@ -95,7 +95,13 @@ export default async function middleware(req: NextRequest) {
 
     // 5. RBAC: Redirect to /dashboard if user is not a doctor and trying to access doctor-only routes
     if (isDoctorRoute && session?.role !== "doctor") {
-        return NextResponse.redirect(new URL("/dashboard", req.nextUrl));
+        // Exception: Allow patients to access /patients/new (create profile) and /patients/:id (view profile)
+        // We only want to block the main /patients list for non-doctors
+        if (path.startsWith("/patients/")) {
+            // Let the page handle ownership verification
+        } else {
+            return NextResponse.redirect(new URL("/dashboard", req.nextUrl));
+        }
     }
 
     // 6. Update session if it exists to slide the expiration

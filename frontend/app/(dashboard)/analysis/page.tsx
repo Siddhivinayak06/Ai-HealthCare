@@ -17,9 +17,9 @@ export default async function AnalysisPage() {
     return (
         <div className="min-h-screen relative overflow-hidden bg-slate-950/20">
             {/* Background effects */}
-            <div className="absolute inset-0 bg-grid-pattern opacity-5" />
-            <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-gradient-to-br from-violet-600/10 via-fuchsia-600/5 to-transparent rounded-full blur-[120px]" />
-            <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-gradient-to-tr from-cyan-600/10 via-blue-600/5 to-transparent rounded-full blur-[120px]" />
+            <div className="absolute inset-0 bg-grid-pattern opacity-5 pointer-events-none" />
+            <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-gradient-to-br from-violet-600/10 via-fuchsia-600/5 to-transparent rounded-full blur-[120px] pointer-events-none" />
+            <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-gradient-to-tr from-cyan-600/10 via-blue-600/5 to-transparent rounded-full blur-[120px] pointer-events-none" />
 
             <div className="relative p-4 lg:p-8 pt-16 lg:pt-8 space-y-8 max-w-7xl mx-auto">
                 {/* Header Section */}
@@ -60,17 +60,15 @@ export default async function AnalysisPage() {
                         { label: "Normal Results", value: normalCases, icon: Sparkles, color: "text-emerald-500" },
                         { label: "Model Reliability", value: "94.8%", icon: TrendingUp, color: "text-violet-500" },
                     ].map((stat, i) => (
-                        <Card key={i} className="bento-card border-white/5 bg-white/[0.02] backdrop-blur-xl">
-                            <CardContent className="p-4 flex items-center gap-4">
-                                <div className={cn("p-2 rounded-lg bg-white/5", stat.color)}>
-                                    <stat.icon className="h-5 w-5" />
-                                </div>
-                                <div>
-                                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">{stat.label}</p>
-                                    <p className="text-2xl font-bold">{stat.value}</p>
-                                </div>
-                            </CardContent>
-                        </Card>
+                        <div key={i} className="glass-panel p-6 rounded-3xl border-white/5 bg-white/[0.02] flex items-center gap-5 hover-glow group transition-all duration-500">
+                            <div className={cn("p-3 rounded-2xl bg-white/5 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3", stat.color)}>
+                                <stat.icon className="h-6 w-6" />
+                            </div>
+                            <div>
+                                <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{stat.label}</p>
+                                <p className="text-2xl font-black text-white">{stat.value}</p>
+                            </div>
+                        </div>
                     ))}
                 </div>
 

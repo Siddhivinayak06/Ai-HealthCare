@@ -33,25 +33,29 @@ export function AuthForm({ mode }: AuthFormProps) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12 relative overflow-hidden">
       {/* Background effects */}
-      <div className="absolute inset-0 bg-grid-pattern opacity-30" />
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
-      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-success/10 rounded-full blur-3xl" />
+      <div className="absolute inset-0 bg-grid-pattern opacity-20" />
+      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-gradient-to-br from-primary/20 to-violet-500/10 rounded-full blur-3xl animate-float" />
+      <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-gradient-to-br from-success/15 to-cyan-500/10 rounded-full blur-3xl animate-float" style={{ animationDelay: '3s' }} />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/5 rounded-full blur-3xl" />
 
-      <div className="w-full max-w-md space-y-8 relative">
+      <div className="w-full max-w-md space-y-8 relative z-10">
         {/* Logo */}
-        <div className="flex flex-col items-center gap-3">
-          <div className="relative">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-primary/70 shadow-xl shadow-primary/30">
-              <HeartPulseIcon className="h-8 w-8 text-primary-foreground" />
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative group">
+            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-violet-500 to-primary shadow-2xl shadow-primary/40 group-hover:shadow-primary/60 transition-shadow duration-500">
+              <HeartPulseIcon className="h-10 w-10 text-white" />
             </div>
-            <div className="absolute inset-0 rounded-2xl bg-primary/30 blur-xl" />
+            <div className="absolute inset-0 rounded-2xl bg-primary/40 blur-2xl group-hover:blur-3xl transition-all duration-500" />
+            <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-primary/50 to-violet-500/50 blur-xl opacity-50 group-hover:opacity-75 transition-opacity duration-500" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">MedAI Diagnostics</h1>
-          <p className="text-sm text-muted-foreground font-medium">AI-Powered Healthcare Analysis</p>
+          <div className="text-center space-y-1">
+            <h1 className="text-3xl font-bold text-gradient-primary tracking-tight">MedAI Diagnostics</h1>
+            <p className="text-sm text-muted-foreground font-medium">AI-Powered Healthcare Analysis</p>
+          </div>
         </div>
 
         {/* Form Card - Bento styled */}
-        <div className="bento-card p-8">
+        <div className="health-card p-8 backdrop-blur-xl">
           <div className="space-y-2 text-center mb-8">
             <h2 className="text-2xl font-bold text-card-foreground">
               {isLogin ? "Welcome back" : "Create an account"}
@@ -167,7 +171,7 @@ export function AuthForm({ mode }: AuthFormProps) {
 
             <Button
               type="submit"
-              className="w-full h-12 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25 font-semibold text-base transition-all duration-200"
+              className="w-full h-12 btn-gradient rounded-xl shadow-lg shadow-primary/30 font-semibold text-base transition-all duration-300 hover:shadow-xl hover:shadow-primary/40"
               disabled={isPending}
             >
               {isPending ? (

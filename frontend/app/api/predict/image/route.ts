@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, requireAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { scans, diagnoses } from "@/lib/schema";
+import { scans, diagnoses, imageAnalyses } from "@/lib/schema";
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || "http://127.0.0.1:8000";
 
@@ -36,13 +36,6 @@ export async function POST(req: NextRequest) {
         if (!file) {
             return NextResponse.json(
                 { success: false, error: { message: "No image file uploaded" } },
-                { status: 400 }
-            );
-        }
-
-        if (!patientId) {
-            return NextResponse.json(
-                { success: false, error: { message: "Patient ID is required" } },
                 { status: 400 }
             );
         }
@@ -115,40 +108,67 @@ export async function POST(req: NextRequest) {
 
             const data = await response.json();
 
-            // ==================== Persistence: Save to DB ====================
-            // 1. Save Scan metadata
-            const scanResult = await db.insert(scans).values({
-                patientId: patientId,
-                scanType: scanType,
-                imageUrl: data.image_url || data.id, // ML service might return a relative path or ID
-                uploadedBy: user.id,
-            }).returning();
+            // ==================== Persistence: Save to DB (Optional) ====================
+            let dbIds = {};
+            if (patientId && patientId !== "undefined") {
+                try {
+                    // 1. Save Scan metadata
+                    const scanResult = await db.insert(scans).values({
+                        patientId: patientId,
+                        scanType: scanType,
+                        imageUrl: data.image_url || data.id || "pending",
+                        uploadedBy: user.id,
+                    }).returning();
 
-            const newScan = scanResult[0];
+                    const newScan = scanResult[0];
 
-            // 2. Save Diagnosis
-            const diagnosisResult = await db.insert(diagnoses).values({
-                scanId: newScan.id,
-                predictedCondition: data.diagnosis || "Unknown",
-                confidenceScore: data.confidence?.toString() || "0",
-                riskLevel: data.severity || "Low",
-                explanation: {
-                    findings: data.findings,
-                    recommendations: data.recommendations,
-                    explanation_text: data.explanation_text,
-                    explanation_url: data.explanation_url,
-                    confidence_metrics: data.confidence_metrics
-                },
-                modelVersion: data.modelVersion || "3.0.0",
-            }).returning();
+                    // 2. Save Diagnosis
+                    const diagnosisResult = await db.insert(diagnoses).values({
+                        scanId: newScan.id,
+                        predictedCondition: data.diagnosis || data.prediction || "Unknown",
+                        confidenceScore: (data.confidence || 0).toString(),
+                        riskLevel: data.severity || "Low",
+                        explanation: {
+                            findings: data.findings,
+                            recommendations: data.recommendations,
+                            explanation_text: data.explanation_text,
+                            explanation_url: data.explanation_url,
+                            confidence_metrics: data.confidence_metrics
+                        },
+                        modelVersion: data.model_info?.architecture || "DenseNet121",
+                    }).returning();
 
-            const newDiagnosis = diagnosisResult[0];
+                    const newDiagnosis = diagnosisResult[0];
+
+                    // 3. Legacy Fallback
+                    await db.insert(imageAnalyses).values({
+                        userId: user.id,
+                        patientId: patientId,
+                        scanType: scanType,
+                        imageUrl: data.image_url || data.id,
+                        diagnosis: data.diagnosis || data.prediction || "Unknown",
+                        confidence: (data.confidence || 0).toString(),
+                        severity: data.severity || "Low",
+                        findings: data.findings,
+                        recommendations: (data.recommendations || []).join(". "),
+                        processingTime: (data.processing_time || 0).toString(),
+                        modelVersion: data.model_info?.architecture || "DenseNet121",
+                    });
+
+                    dbIds = {
+                        dbScanId: newScan.id,
+                        dbDiagnosisId: newDiagnosis.id
+                    };
+                } catch (dbError) {
+                    console.error("Failed to auto-save scan to DB:", dbError);
+                    // Don't fail the whole request if DB save fails
+                }
+            }
 
             // Return enriched data
             return NextResponse.json({
                 ...data,
-                dbScanId: newScan.id,
-                dbDiagnosisId: newDiagnosis.id
+                ...dbIds
             });
         } catch (fetchError) {
             clearTimeout(timeout);

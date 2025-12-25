@@ -55,7 +55,7 @@ export async function saveImageAnalysis(data: {
             entityType: 'IMAGE_ANALYSIS',
             entityId: newAnalysis.id,
             findings: data.findings,
-            confidenceScore: data.confidence.toString(),
+            confidence: data.confidence.toString(),
         });
 
         await logActivity("Image analysis completed", "analysis", {
@@ -98,6 +98,8 @@ export async function saveRiskPrediction(data: {
             modelVersion: 'HealthPredict v2.1',
         }).returning();
 
+        const newPrediction = result[0];
+
         await logActivity("Risk prediction generated", "prediction", {
             patientId: data.patientId,
             condition: data.condition,
@@ -105,9 +107,9 @@ export async function saveRiskPrediction(data: {
         });
 
         revalidatePath("/risk");
-        return result[0];
+        return { success: true, data: newPrediction };
     } catch (error) {
         console.error("Save risk prediction error:", error);
-        throw new Error("Failed to save risk prediction");
+        return { success: false, error: "Failed to save risk prediction" };
     }
 }

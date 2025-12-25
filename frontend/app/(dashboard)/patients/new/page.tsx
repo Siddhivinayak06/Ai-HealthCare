@@ -89,181 +89,209 @@ export default function NewPatientPage() {
     }
 
     return (
-        <div className="container max-w-3xl py-10">
-            <div className="mb-6">
-                <Link href="/dashboard" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-2 mb-4">
-                    <ArrowLeft className="h-4 w-4" /> Back to Dashboard
-                </Link>
-                <h1 className="text-3xl font-bold tracking-tight">Create Patient Profile</h1>
-                <p className="text-muted-foreground mt-2">
-                    Set up your medical profile to enable AI analytics and health tracking.
-                </p>
-            </div>
+        <div className="relative min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 lg:p-8 overflow-hidden">
+            {/* Background Effects */}
+            <div className="absolute inset-0 bg-grid-pattern opacity-20 pointer-events-none" />
+            <div className="absolute top-20 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-pulse pointer-events-none" />
+            <div className="absolute bottom-20 right-1/4 w-96 h-96 bg-accent/10 rounded-full blur-3xl animate-pulse delay-1000 pointer-events-none" />
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Personal Information</CardTitle>
-                    <CardDescription>Enter your basic details required for medical identification.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Form {...form}>
-                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-                            {/* Basic Info */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <FormField control={form.control} name="firstName" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>First Name *</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="John" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )} />
-                                <FormField control={form.control} name="lastName" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Last Name *</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="Doe" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )} />
-                                <FormField control={form.control} name="dateOfBirth" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Date of Birth *</FormLabel>
-                                        <FormControl>
-                                            <Input type="date" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )} />
-                                <FormField control={form.control} name="gender" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Gender *</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                            <FormControl>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Select gender" />
-                                                </SelectTrigger>
-                                            </FormControl>
-                                            <SelectContent>
-                                                <SelectItem value="Male">Male</SelectItem>
-                                                <SelectItem value="Female">Female</SelectItem>
-                                                <SelectItem value="Other">Other</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                    </FormItem>
-                                )} />
+            <div className="relative z-10 container max-w-4xl">
+                <div className="mb-8">
+                    <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors mb-6 group">
+                        <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
+                        Back to Dashboard
+                    </Link>
+                    <div className="space-y-2">
+                        <h1 className="text-4xl font-bold tracking-tight text-gradient">Create Health Profile</h1>
+                        <p className="text-muted-foreground text-lg">
+                            Set up your digital medical identity to enable AI-powered diagnostics and personalized health tracking.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="glass-panel p-1 rounded-2xl shadow-xl">
+                    <div className="bg-card/50 backdrop-blur-sm rounded-xl p-6 lg:p-10 border border-white/5">
+                        <div className="flex items-center gap-4 mb-8 pb-6 border-b border-border/50">
+                            <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                                <UserPlus className="h-6 w-6" />
                             </div>
-
-                            <Separator />
-
-                            {/* Contact Info */}
-                            <div className="space-y-4">
-                                <h3 className="text-lg font-medium">Contact Details</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <FormField control={form.control} name="email" render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Email</FormLabel>
-                                            <FormControl>
-                                                <Input type="email" placeholder="john.doe@example.com" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )} />
-                                    <FormField control={form.control} name="phone" render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Phone Number</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="+1 234 567 8900" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )} />
-                                    <FormField control={form.control} name="address" render={({ field }) => (
-                                        <FormItem className="col-span-1 md:col-span-2">
-                                            <FormLabel>Address</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="123 Main St, City, Country" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )} />
-                                </div>
+                            <div>
+                                <h2 className="text-xl font-semibold">Patient Registration</h2>
+                                <p className="text-sm text-muted-foreground">Please fill in all required fields accurately.</p>
                             </div>
+                        </div>
 
-                            <Separator />
-
-                            {/* Medical Info */}
-                            <div className="space-y-4">
-                                <h3 className="text-lg font-medium">Medical History</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <FormField control={form.control} name="bloodType" render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Blood Type</FormLabel>
-                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Form {...form}>
+                            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-10">
+                                {/* Section 1: Personal Info */}
+                                <div className="space-y-6">
+                                    <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full bg-primary/50" />
+                                        Personal Information
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <FormField control={form.control} name="firstName" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>First Name</FormLabel>
                                                 <FormControl>
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Select blood type" />
-                                                    </SelectTrigger>
+                                                    <Input placeholder="e.g. John" {...field} className="bg-background/50 focus:bg-background transition-colors" />
                                                 </FormControl>
-                                                <SelectContent>
-                                                    <SelectItem value="A+">A+</SelectItem>
-                                                    <SelectItem value="A-">A-</SelectItem>
-                                                    <SelectItem value="B+">B+</SelectItem>
-                                                    <SelectItem value="B-">B-</SelectItem>
-                                                    <SelectItem value="AB+">AB+</SelectItem>
-                                                    <SelectItem value="AB-">AB-</SelectItem>
-                                                    <SelectItem value="O+">O+</SelectItem>
-                                                    <SelectItem value="O-">O-</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )} />
-                                    <FormField control={form.control} name="emergencyContactName" render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Emergency Contact Name</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="Name of relative/friend" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )} />
-                                    <FormField control={form.control} name="medicalConditions" render={({ field }) => (
-                                        <FormItem className="col-span-1 md:col-span-2">
-                                            <FormLabel>Known Medical Conditions</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="Diabetes, Hypertension (separated by comma)" {...field} />
-                                            </FormControl>
-                                            <FormDescription>Comma-separated list of existing conditions</FormDescription>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )} />
-                                    <FormField control={form.control} name="allergies" render={({ field }) => (
-                                        <FormItem className="col-span-1 md:col-span-2">
-                                            <FormLabel>Allergies</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="Peanuts, Penicillin (separated by comma)" {...field} />
-                                            </FormControl>
-                                            <FormDescription>Comma-separated list of known allergies</FormDescription>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )} />
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                        <FormField control={form.control} name="lastName" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Last Name</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="e.g. Doe" {...field} className="bg-background/50 focus:bg-background transition-colors" />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                        <FormField control={form.control} name="dateOfBirth" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Date of Birth</FormLabel>
+                                                <FormControl>
+                                                    <Input type="date" {...field} className="bg-background/50 focus:bg-background transition-colors" />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                        <FormField control={form.control} name="gender" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Gender</FormLabel>
+                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                    <FormControl>
+                                                        <SelectTrigger className="bg-background/50 focus:bg-background transition-colors">
+                                                            <SelectValue placeholder="Select gender" />
+                                                        </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent>
+                                                        <SelectItem value="Male">Male</SelectItem>
+                                                        <SelectItem value="Female">Female</SelectItem>
+                                                        <SelectItem value="Other">Other</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                    </div>
                                 </div>
-                            </div>
 
-                            <div className="flex justify-end pt-4">
-                                <Button type="submit" size="lg" disabled={loading} className="gap-2">
-                                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-                                    Create Profile
-                                </Button>
-                            </div>
-                        </form>
-                    </Form>
-                </CardContent>
-            </Card>
+                                <Separator className="opacity-50" />
+
+                                {/* Section 2: Contact Info */}
+                                <div className="space-y-6">
+                                    <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full bg-accent/50" />
+                                        Contact Details
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <FormField control={form.control} name="email" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Email Address</FormLabel>
+                                                <FormControl>
+                                                    <Input type="email" placeholder="john@example.com" {...field} className="bg-background/50 focus:bg-background transition-colors" />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                        <FormField control={form.control} name="phone" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Phone Number</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="+1 (555) 000-0000" {...field} className="bg-background/50 focus:bg-background transition-colors" />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                        <FormField control={form.control} name="address" render={({ field }) => (
+                                            <FormItem className="col-span-1 md:col-span-2">
+                                                <FormLabel>Residential Address</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="123 Innovation Dr, Tech City, TC 94043" {...field} className="bg-background/50 focus:bg-background transition-colors" />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                    </div>
+                                </div>
+
+                                <Separator className="opacity-50" />
+
+                                {/* Section 3: Medical Info */}
+                                <div className="space-y-6">
+                                    <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full bg-destructive/50" />
+                                        Medical History
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <FormField control={form.control} name="bloodType" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Blood Type</FormLabel>
+                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                    <FormControl>
+                                                        <SelectTrigger className="bg-background/50 focus:bg-background transition-colors">
+                                                            <SelectValue placeholder="Select blood type" />
+                                                        </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent>
+                                                        <SelectItem value="A+">A+</SelectItem>
+                                                        <SelectItem value="A-">A-</SelectItem>
+                                                        <SelectItem value="B+">B+</SelectItem>
+                                                        <SelectItem value="B-">B-</SelectItem>
+                                                        <SelectItem value="AB+">AB+</SelectItem>
+                                                        <SelectItem value="AB-">AB-</SelectItem>
+                                                        <SelectItem value="O+">O+</SelectItem>
+                                                        <SelectItem value="O-">O-</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                        <FormField control={form.control} name="emergencyContactName" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Emergency Contact</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="Name of relative/friend" {...field} className="bg-background/50 focus:bg-background transition-colors" />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                        <FormField control={form.control} name="medicalConditions" render={({ field }) => (
+                                            <FormItem className="col-span-1 md:col-span-2">
+                                                <FormLabel>Known Conditions</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="Diabetes, Hypertension..." {...field} className="bg-background/50 focus:bg-background transition-colors" />
+                                                </FormControl>
+                                                <FormDescription>Comma-separated list of existing medical conditions</FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                        <FormField control={form.control} name="allergies" render={({ field }) => (
+                                            <FormItem className="col-span-1 md:col-span-2">
+                                                <FormLabel>Allergies</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="Peanuts, Penicillin..." {...field} className="bg-background/50 focus:bg-background transition-colors" />
+                                                </FormControl>
+                                                <FormDescription>Comma-separated list of known allergies</FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end pt-6 border-t border-border/50">
+                                    <Button type="submit" size="lg" disabled={loading} className="min-w-[200px] shadow-lg hover:shadow-primary/25 transition-all text-base gap-2 bg-gradient-to-r from-primary to-accent hover:to-primary">
+                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <UserPlus className="h-5 w-5" />}
+                                        Create Profile
+                                    </Button>
+                                </div>
+                            </form>
+                        </Form>
+                    </div>
+                </div>
+            </div>
         </div>
     )
 }
