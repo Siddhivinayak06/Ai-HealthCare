@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
         const session = await encrypt({
             id: user.id,
             email: user.email,
+            name: user.name,
             role: user.role || "patient",
             expires
         });

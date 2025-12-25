@@ -49,59 +49,71 @@ export function SecuritySettings() {
     }
 
     return (
-        <BentoCard>
-            <div className="mb-6">
-                <h3 className="text-lg font-semibold text-card-foreground">Security Settings</h3>
-                <p className="text-sm text-muted-foreground mt-1">Manage your password and security.</p>
+        <div className="health-card p-8">
+            <div className="mb-8">
+                <h3 className="text-xl font-bold text-foreground">Security Settings</h3>
+                <p className="text-sm text-muted-foreground mt-1">Manage your password and protect your account.</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-2">
-                    <Label htmlFor="current-password">Current Password</Label>
+                    <Label htmlFor="current-password" className="text-sm font-semibold text-foreground/80">Current Password</Label>
                     <Input
                         id="current-password"
                         type="password"
                         value={currentPassword}
                         onChange={(e) => setCurrentPassword(e.target.value)}
                         required
+                        className="h-12 bg-secondary/30 border-border/50 focus:border-primary/50 transition-all duration-300 input-enhanced"
                     />
                 </div>
 
                 <div className="space-y-2">
-                    <Label htmlFor="new-password">New Password</Label>
+                    <Label htmlFor="new-password" className="text-sm font-semibold text-foreground/80">New Password</Label>
                     <Input
                         id="new-password"
                         type="password"
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
                         required
+                        className="h-12 bg-secondary/30 border-border/50 focus:border-primary/50 transition-all duration-300 input-enhanced"
                     />
                 </div>
 
                 <div className="space-y-2">
-                    <Label htmlFor="confirm-password">Confirm New Password</Label>
+                    <Label htmlFor="confirm-password" className="text-sm font-semibold text-foreground/80">Confirm New Password</Label>
                     <Input
                         id="confirm-password"
                         type="password"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         required
+                        className="h-12 bg-secondary/30 border-border/50 focus:border-primary/50 transition-all duration-300 input-enhanced"
                     />
                 </div>
 
                 {message && (
-                    <div className={`p-3 rounded-lg text-sm ${message.type === 'success' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
+                    <div className={`p-4 rounded-xl text-sm font-medium border flex items-center gap-3 animate-in fade-in slide-in-from-top-2 ${message.type === 'success'
+                            ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                            : 'bg-destructive/10 text-destructive border-destructive/20'
+                        }`}>
+                        <div className={`h-2 w-2 rounded-full ${message.type === 'success' ? 'bg-emerald-500' : 'bg-destructive'}`} />
                         {message.text}
                     </div>
                 )}
 
-                <div className="flex justify-end">
-                    <Button type="submit" disabled={loading} variant="outline" className="border-destructive/50 hover:bg-destructive/10 hover:text-destructive">
-                        {loading && <LoaderIcon className="mr-2 h-4 w-4 animate-spin" />}
-                        Change Password
+                <div className="flex justify-end pt-4">
+                    <Button
+                        type="submit"
+                        disabled={loading}
+                        variant="outline"
+                        className="h-12 px-8 rounded-xl font-bold border-destructive/30 hover:bg-destructive/10 hover:text-destructive transition-all duration-300"
+                    >
+                        {loading && <LoaderIcon className="mr-2 h-5 w-5 animate-spin" />}
+                        Update Password
                     </Button>
                 </div>
             </form>
-        </BentoCard>
+        </div >
     )
 }

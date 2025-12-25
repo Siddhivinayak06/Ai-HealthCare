@@ -49,7 +49,7 @@ export function AuthForm({ mode }: AuthFormProps) {
             <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-primary/50 to-violet-500/50 blur-xl opacity-50 group-hover:opacity-75 transition-opacity duration-500" />
           </div>
           <div className="text-center space-y-1">
-            <h1 className="text-3xl font-bold text-gradient-primary tracking-tight">MedAI Diagnostics</h1>
+            <h1 className="text-3xl font-bold text-primary tracking-tight">MedAI Diagnostics</h1>
             <p className="text-sm text-muted-foreground font-medium">AI-Powered Healthcare Analysis</p>
           </div>
         </div>

@@ -26,42 +26,20 @@ function formatDate(date: Date | string): string {
 }
 
 export function AnalysisHistory({ analyses = [] }: AnalysisHistoryProps) {
-  const displayData =
-    analyses.length > 0
-      ? analyses
-      : [
-        {
-          id: "1",
-          scanType: "Chest X-Ray",
-          diagnosis: "No abnormalities detected",
-          severity: "Normal",
-          confidence: 94,
-          patientName: "John Doe",
-          createdAt: new Date(),
-        },
-        {
-          id: "2",
-          scanType: "Brain MRI",
-          diagnosis: "Minor calcification noted",
-          severity: "Low",
-          confidence: 89,
-          patientName: "Sarah Miller",
-          createdAt: new Date(Date.now() - 86400000),
-        },
-      ]
+  const displayData = analyses;
 
   return (
-    <div className="glass-panel rounded-3xl overflow-hidden border-white/5 bg-white/[0.02]">
-      <div className="p-6 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
+    <div className="health-card overflow-hidden">
+      <div className="p-5 border-b border-border/30 bg-gradient-to-r from-cyan-500/5 to-transparent flex items-center justify-between">
         <div className="space-y-1">
-          <h3 className="text-sm font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2">
-            <History className="h-4 w-4 text-violet-400" />
+          <h3 className="text-sm font-bold uppercase tracking-widest flex items-center gap-2">
+            <History className="h-4 w-4 text-cyan-400" />
             Registry
           </h3>
-          <p className="text-[10px] text-slate-500 font-medium">Historical clinical logs</p>
+          <p className="text-[10px] text-muted-foreground font-medium">Historical clinical logs</p>
         </div>
-        <div className="h-8 w-8 rounded-lg bg-white/5 flex items-center justify-center">
-          <Activity className="h-4 w-4 text-slate-500" />
+        <div className="h-9 w-9 rounded-xl bg-cyan-500/10 flex items-center justify-center">
+          <Activity className="h-4 w-4 text-cyan-400" />
         </div>
       </div>
 
@@ -69,45 +47,47 @@ export function AnalysisHistory({ analyses = [] }: AnalysisHistoryProps) {
         {displayData.map((item) => (
           <div
             key={item.id}
-            className="group flex items-center justify-between p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.08] transition-all duration-300 cursor-pointer border border-white/5 hover:border-violet-500/30"
+            className="group flex items-center justify-between p-4 rounded-xl bg-secondary/20 hover:bg-secondary/40 transition-all duration-300 cursor-pointer border border-border/20 hover:border-primary/30"
           >
             <div className="min-w-0 flex-1 space-y-2">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                   {item.scanType?.toUpperCase()}
                 </span>
                 <Badge
                   className={cn(
-                    "text-[8px] px-1.5 py-0 rounded-full border-none font-bold uppercase tracking-widest",
-                    item.severity?.toLowerCase() === "normal" && "bg-emerald-500/20 text-emerald-400",
-                    item.severity?.toLowerCase() === "low" && "bg-cyan-500/20 text-cyan-400",
-                    item.severity?.toLowerCase() === "medium" && "bg-amber-500/20 text-amber-400",
-                    item.severity?.toLowerCase() === "high" && "bg-rose-500/20 text-rose-400",
-                    item.severity?.toLowerCase() === "critical" && "bg-rose-600 text-white",
+                    "text-[9px] px-2 py-0.5 rounded-full border-none font-bold uppercase tracking-wide",
+                    item.severity?.toLowerCase() === "normal" && "bg-emerald-500/15 text-emerald-400",
+                    item.severity?.toLowerCase() === "low" && "bg-cyan-500/15 text-cyan-400",
+                    item.severity?.toLowerCase() === "medium" && "bg-amber-500/15 text-amber-400",
+                    item.severity?.toLowerCase() === "high" && "bg-rose-500/15 text-rose-400",
+                    item.severity?.toLowerCase() === "critical" && "bg-rose-500/20 text-rose-400",
                   )}
                 >
                   {item.severity}
                 </Badge>
               </div>
-              <p className="text-xs font-bold text-white truncate leading-none">
+              <p className="text-sm font-semibold truncate leading-none group-hover:text-primary transition-colors">
                 {item.diagnosis}
               </p>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-slate-500 font-medium">{item.patientName || "Anonymous"}</span>
-                <span className="h-1 w-1 rounded-full bg-slate-700" />
-                <span className="text-[10px] text-slate-600 font-medium">{formatDate(item.createdAt)}</span>
+                <span className="text-[10px] text-muted-foreground font-medium">{item.patientName || "Anonymous"}</span>
+                <span className="h-1 w-1 rounded-full bg-border" />
+                <span className="text-[10px] text-muted-foreground/70 font-medium">{formatDate(item.createdAt)}</span>
               </div>
             </div>
             <div className="ml-4 translate-x-1 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 transition-all">
-              <ChevronRight className="h-4 w-4 text-violet-400" />
+              <ChevronRight className="h-4 w-4 text-primary" />
             </div>
           </div>
         ))}
 
         {analyses.length === 0 && displayData.length === 0 && (
-          <div className="text-center py-10 opacity-20 flex flex-col items-center gap-3">
-            <History className="h-10 w-10 text-slate-400" />
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No Logs Found</p>
+          <div className="text-center py-12 flex flex-col items-center gap-3">
+            <div className="h-12 w-12 rounded-xl bg-muted/50 flex items-center justify-center">
+              <History className="h-6 w-6 text-muted-foreground/50" />
+            </div>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">No Logs Found</p>
           </div>
         )}
       </div>

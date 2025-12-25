@@ -76,7 +76,8 @@ export async function logout() {
 
 /**
  * Get the current session, returns { user: null } if expired or invalid
- * Returns { user: SessionUser } if valid session exists
+ * Returns { user: SessionUser } if valid session exists.
+ * SELF-HEALING: If name is missing, it fetches from DB and updates session.
  */
 export async function getSession(): Promise<{ user: SessionUser | null }> {
   const cookieStore = await cookies();
@@ -91,11 +92,35 @@ export async function getSession(): Promise<{ user: SessionUser | null }> {
       return { user: null };
     }
 
+    let userName = parsed.name;
+
+    // 🩹 UI-LEVEL HEALING: Fetch name from DB if missing in token 
+    // (Actual cookie update happens in middleware/updateSession)
+    if (!userName) {
+      try {
+        const { db } = await import("@/lib/db");
+        const { users } = await import("@/lib/schema");
+        const { eq } = await import("drizzle-orm");
+
+        const userResult = await db
+          .select({ name: users.name })
+          .from(users)
+          .where(eq(users.id, parsed.id))
+          .limit(1);
+
+        if (userResult.length > 0 && userResult[0].name) {
+          userName = userResult[0].name;
+        }
+      } catch (dbError) {
+        // Silently fail, UI will fallback to email
+      }
+    }
+
     return {
       user: {
         id: parsed.id,
         email: parsed.email,
-        name: parsed.name,
+        name: userName,
         role: parsed.role,
       },
     };
@@ -116,23 +141,45 @@ export async function updateSession(request: NextRequest) {
     const parsed = await decrypt(session);
     const newExpires = new Date(Date.now() + SESSION_DURATION_MS);
 
+    let userName = parsed.name;
+
+    // 🩹 COOKIE-LEVEL HEALING: Fetch name from DB if missing
+    if (!userName) {
+      try {
+        const { db } = await import("@/lib/db");
+        const { users } = await import("@/lib/schema");
+        const { eq } = await import("drizzle-orm");
+
+        const userResult = await db
+          .select({ name: users.name })
+          .from(users)
+          .where(eq(users.id, parsed.id))
+          .limit(1);
+
+        if (userResult.length > 0 && userResult[0].name) {
+          userName = userResult[0].name;
+        }
+      } catch (e) {
+        // Fallback to null
+      }
+    }
+
     const res = NextResponse.next();
     res.cookies.set({
       name: "auth_token",
       value: await encrypt({
-        id: parsed.id,
-        email: parsed.email,
-        role: parsed.role,
+        ...parsed,
+        name: userName,
         expires: newExpires.toISOString()
       }),
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       expires: newExpires,
       path: "/",
+      sameSite: "lax"
     });
     return res;
   } catch {
-    // If token is invalid, just continue without updating
     return NextResponse.next();
   }
 }

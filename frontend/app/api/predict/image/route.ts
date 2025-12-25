@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession, requireAuth } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth"; // removed getSession as unused
 import { db } from "@/lib/db";
-import { scans, diagnoses, imageAnalyses } from "@/lib/schema";
+import { scans, diagnoses } from "@/lib/schema";
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || "http://127.0.0.1:8000";
 
@@ -67,6 +67,29 @@ export async function POST(req: NextRequest) {
             );
         }
 
+        // ==================== Persistence: Cloudinary Upload ====================
+        let cloudinaryUrl = "";
+        try {
+            const buffer = Buffer.from(await file.arrayBuffer());
+            const uploadResult = await new Promise<any>((resolve, reject) => {
+                // @ts-ignore
+                import("@/lib/cloudinary").then((mod) => {
+                    mod.default.uploader.upload_stream(
+                        { folder: "ai-healthcare/scans", resource_type: "auto" },
+                        (error, result) => {
+                            if (error) reject(error);
+                            else resolve(result);
+                        }
+                    ).end(buffer);
+                });
+            });
+            cloudinaryUrl = uploadResult.secure_url;
+        } catch (uploadError) {
+            console.error("Cloudinary upload failed:", uploadError);
+            // Verify if we should abort or continue with temporary ID
+            // For now, we continue but log error
+        }
+
         const mlFormData = new FormData();
         mlFormData.append("file", file);
 
@@ -116,7 +139,7 @@ export async function POST(req: NextRequest) {
                     const scanResult = await db.insert(scans).values({
                         patientId: patientId,
                         scanType: scanType,
-                        imageUrl: data.image_url || data.id || "pending",
+                        imageUrl: cloudinaryUrl || data.image_url || "pending_upload",
                         uploadedBy: user.id,
                     }).returning();
 
@@ -140,20 +163,7 @@ export async function POST(req: NextRequest) {
 
                     const newDiagnosis = diagnosisResult[0];
 
-                    // 3. Legacy Fallback
-                    await db.insert(imageAnalyses).values({
-                        userId: user.id,
-                        patientId: patientId,
-                        scanType: scanType,
-                        imageUrl: data.image_url || data.id,
-                        diagnosis: data.diagnosis || data.prediction || "Unknown",
-                        confidence: (data.confidence || 0).toString(),
-                        severity: data.severity || "Low",
-                        findings: data.findings,
-                        recommendations: (data.recommendations || []).join(". "),
-                        processingTime: (data.processing_time || 0).toString(),
-                        modelVersion: data.model_info?.architecture || "DenseNet121",
-                    });
+
 
                     dbIds = {
                         dbScanId: newScan.id,
@@ -168,7 +178,8 @@ export async function POST(req: NextRequest) {
             // Return enriched data
             return NextResponse.json({
                 ...data,
-                ...dbIds
+                ...dbIds,
+                file_url: cloudinaryUrl // Explicitly return the CLoudinary URL
             });
         } catch (fetchError) {
             clearTimeout(timeout);

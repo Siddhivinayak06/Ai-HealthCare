@@ -28,11 +28,11 @@ export function UserMenu({ user }: UserMenuProps) {
 
   const initials = user.name
     ? user.name
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2)
     : user.email[0].toUpperCase()
 
   function handleSignOut() {
@@ -50,7 +50,7 @@ export function UserMenu({ user }: UserMenuProps) {
           </AvatarFallback>
         </Avatar>
         <div className="flex-1 text-left min-w-0">
-          <p className="truncate font-semibold text-sidebar-foreground">{user.name || "User"}</p>
+          <p className="truncate font-semibold text-sidebar-foreground">{user.name || user.email.split("@")[0]}</p>
           <p className="truncate text-xs text-muted-foreground">{user.email}</p>
         </div>
         <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />

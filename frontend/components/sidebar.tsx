@@ -57,7 +57,7 @@ export function Sidebar({ user }: SidebarProps) {
             <HeartPulseIcon className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="font-bold text-lg tracking-tight">MedAI</h1>
+            <h1 className="font-bold text-lg tracking-tight text-primary">MedAI</h1>
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">
               Diagnostics Platform
             </p>

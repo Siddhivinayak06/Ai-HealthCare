@@ -15,6 +15,8 @@ import { Label } from "@/components/ui/label"
 import { saveImageAnalysis, getLatestScanForPatient, compareImagingTrends, getHistoricalTrendsForPatient, submitFeedback } from "@/app/actions/analyses"
 import { toast } from "sonner"
 import { PatientTrendChart } from "@/components/patient-trend-chart"
+import { useRouter } from "next/navigation"
+import { getPatients } from "@/app/actions/patients"
 
 interface AnalysisClientProps {
     userRole: string
@@ -43,6 +45,20 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
     const [selectedPatientId, setSelectedPatientId] = useState<string>("")
     const [saving, setSaving] = useState(false)
     const [saveMessage, setSaveMessage] = useState("")
+    const router = useRouter()
+
+    // Auto-select patient for patient users
+    useEffect(() => {
+        const initPatient = async () => {
+            if (userRole === 'patient' || userRole === 'user') {
+                const patients = await getPatients()
+                if (patients && patients.length > 0) {
+                    handlePatientChange(patients[0].id)
+                }
+            }
+        }
+        initPatient()
+    }, [userRole])
 
     // Generate comparative note when results are ready
     useEffect(() => {
@@ -134,6 +150,7 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
             if (!response.success) throw new Error(response.error)
             setSaveMessage("Saved to patient record!")
             handlePatientChange(selectedPatientId) // Refresh history
+            router.refresh()
         } catch (error: any) {
             setSaveMessage(error.message || "Failed to save.")
         } finally {
@@ -173,6 +190,48 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                 if (correctedType.includes("x-ray")) setScanType("xray")
                 else if (correctedType.includes("ct")) setScanType("ct")
                 else if (correctedType.includes("mri")) setScanType("mri")
+            }
+
+            // Auto-save if patient is selected
+            // Auto-save if patient is selected
+            if (selectedPatientId && (responseJson.success || responseJson.prediction)) {
+                // If API already saved to DB, just refresh
+                if (responseJson.dbScanId) {
+                    setSaveMessage("Auto-saved to patient record")
+                    handlePatientChange(selectedPatientId)
+                    toast.success("Analysis saved to patient record")
+                    router.refresh()
+                } else {
+                    // Fallback: Manually save if API didn't
+                    const data = responseJson.success ? responseJson.data : responseJson
+                    try {
+                        setSaving(true)
+                        const apiData = {
+                            patientId: selectedPatientId,
+                            scanType: (data.scan_type || scanType).toUpperCase(),
+                            diagnosis: data.prediction,
+                            confidence: data.confidence * 100,
+                            severity: data.severity || "Medium",
+                            findings: {
+                                result: data.prediction,
+                                details: data.findings || []
+                            },
+                            recommendations: (data.recommendations || ["Consult Radiologist"]).join(", "),
+                            processingTime: data.processing_time || 0.3,
+                            modelVersion: data.model_info?.architecture || "DenseNet121"
+                        }
+                        await saveImageAnalysis(apiData)
+                        setSaveMessage("Auto-saved to patient record")
+                        handlePatientChange(selectedPatientId) // Refresh history
+                        toast.success("Analysis saved to patient record")
+                        router.refresh()
+                    } catch (saveError) {
+                        console.error("Auto-save failed", saveError)
+                        setSaveMessage("Auto-save failed")
+                    } finally {
+                        setSaving(false)
+                    }
+                }
             }
         } catch (err: any) {
             setError(err.message || "Something went wrong")
@@ -255,16 +314,16 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
     return (
         <div className="space-y-8 max-w-6xl mx-auto">
             {/* Scan Type Selection */}
-            <div className="glass-panel p-6 rounded-3xl relative overflow-hidden group">
-                <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-cyan-500/5 opacity-50" />
+            <div className="health-card p-6 relative overflow-hidden group bg-card/95 backdrop-blur-sm">
+                <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-cyan-500/5" />
                 <div className="relative z-10 space-y-4">
                     <div className="flex justify-between items-center">
                         <div className="space-y-1">
-                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
                                 <Scan className="h-4 w-4 text-violet-400" />
                                 Modality Selection
                             </h3>
-                            <p className="text-xs text-slate-500">Choose imaging type for neural processing</p>
+                            <p className="text-xs text-muted-foreground/70">Choose imaging type for neural processing</p>
                         </div>
                         {!isPatient && (
                             <Button
@@ -298,8 +357,8 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                     {type.icon}
                                 </div>
                                 <div className="space-y-1">
-                                    <p className="font-bold text-white tracking-tight">{type.name}</p>
-                                    <p className="text-[10px] text-slate-400 leading-tight">{type.description}</p>
+                                    <p className="font-bold text-foreground tracking-tight">{type.name}</p>
+                                    <p className="text-[10px] text-muted-foreground leading-tight">{type.description}</p>
                                 </div>
                                 {scanType === type.id && (
                                     <div className="absolute top-3 right-3">
@@ -320,10 +379,10 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                             <Brain className="h-8 w-8 text-violet-400" />
                         </div>
                         <div className="text-center space-y-2">
-                            <h3 className="text-xl font-bold text-white">Initiate Neural Retraining?</h3>
-                            <p className="text-sm text-slate-400 leading-relaxed">
+                            <h3 className="text-xl font-bold text-foreground">Initiate Neural Retraining?</h3>
+                            <p className="text-sm text-muted-foreground leading-relaxed">
                                 This will fine-tune the {scanType.toUpperCase()} architecture using validated clinical feedback.
-                                <span className="block mt-1 text-violet-400/80 font-medium">Estimated duration: 3-5 minutes.</span>
+                                <span className="block mt-1 text-violet-400 font-medium">Estimated duration: 3-5 minutes.</span>
                             </p>
                         </div>
                         <div className="flex gap-3">
@@ -337,9 +396,9 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
             <div className="grid gap-8 lg:grid-cols-12">
                 {/* Upload & Controls */}
                 <div className="lg:col-span-5 space-y-6">
-                    <div className="glass-panel rounded-3xl overflow-hidden flex flex-col h-full border-white/5">
-                        <div className="p-6 border-b border-white/5 bg-white/[0.02]">
-                            <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2 italic">
+                    <div className="health-card overflow-hidden flex flex-col h-full bg-card/95 backdrop-blur-sm">
+                        <div className="p-5 border-b border-border/30 bg-gradient-to-r from-cyan-500/5 to-transparent">
+                            <h3 className="text-sm font-bold flex items-center gap-2 uppercase tracking-widest">
                                 <Upload className="h-4 w-4 text-cyan-400" />
                                 Acquisition
                             </h3>
@@ -367,8 +426,8 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                             <FileWarning className="h-8 w-8 text-violet-400" />
                                         </div>
                                         <div className="text-center">
-                                            <p className="text-sm font-bold text-white">{file?.name}</p>
-                                            <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Batch Archive Locked</p>
+                                            <p className="text-sm font-bold text-foreground">{file?.name}</p>
+                                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">Batch Archive Locked</p>
                                         </div>
                                     </div>
                                 ) : (
@@ -377,8 +436,8 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                             <ImageIcon className="h-10 w-10 text-slate-500 group-hover:text-violet-400 transition-colors" />
                                         </div>
                                         <div className="space-y-1">
-                                            <p className="text-sm font-bold text-slate-300">Drop clinical imaging</p>
-                                            <p className="text-xs text-slate-500">Supports DICOM, JPEG, PNG, ZIP</p>
+                                            <p className="text-sm font-bold text-foreground">Drop clinical imaging</p>
+                                            <p className="text-xs text-muted-foreground">Supports DICOM, JPEG, PNG, ZIP</p>
                                         </div>
                                     </div>
                                 )}
@@ -393,8 +452,8 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                             <Sparkles className="h-4 w-4 text-cyan-400" />
                                         </div>
                                         <div>
-                                            <Label className="text-sm font-bold text-slate-200">Explainable AI (XAI)</Label>
-                                            <p className="text-[10px] text-slate-500">Enable feature saliency maps</p>
+                                            <Label className="text-sm font-bold text-foreground">Explainable AI (XAI)</Label>
+                                            <p className="text-[10px] text-muted-foreground">Enable feature saliency maps</p>
                                         </div>
                                     </div>
                                     <Switch checked={explain} onCheckedChange={setExplain} className="data-[state=checked]:bg-cyan-500" />
@@ -419,9 +478,9 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
 
                 {/* AI Insights & Results */}
                 <div className="lg:col-span-7 space-y-6">
-                    <div className="glass-panel rounded-3xl h-full border-white/5 flex flex-col">
-                        <div className="p-6 border-b border-white/5 bg-white/[0.02] flex justify-between items-center">
-                            <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2 italic">
+                    <div className="health-card h-full bg-card/95 backdrop-blur-sm flex flex-col">
+                        <div className="p-5 border-b border-border/30 bg-gradient-to-r from-violet-500/5 to-transparent flex justify-between items-center">
+                            <h3 className="text-sm font-bold flex items-center gap-2 uppercase tracking-widest">
                                 <Activity className="h-4 w-4 text-violet-400" />
                                 Diagnostics
                             </h3>
@@ -450,16 +509,16 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                             {result.severity === "Normal" ? <CheckCircle2 className="h-10 w-10" /> : <AlertCircle className="h-10 w-10" />}
                                         </div>
                                         <div className="text-center md:text-left space-y-1">
-                                            <h3 className="text-2xl md:text-3xl font-black text-white tracking-tight">{result.prediction}</h3>
+                                            <h3 className="text-2xl md:text-3xl font-black text-foreground tracking-tight">{result.prediction}</h3>
                                             <div className="flex items-center justify-center md:justify-start gap-4">
                                                 <div className="flex items-center gap-1.5 grayscale opacity-70 group-hover:grayscale-0 group-hover:opacity-100 transition-all">
                                                     <Brain className="h-3 w-3 text-violet-400" />
-                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{result.model_info?.architecture || "Inference Engine V3"}</span>
+                                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{result.model_info?.architecture || "Inference Engine V3"}</span>
                                                 </div>
-                                                <span className="h-4 w-[1px] bg-white/10" />
+                                                <span className="h-4 w-[1px] bg-border/40" />
                                                 <div className="flex items-center gap-1.5">
-                                                    <Clock className="h-3 w-3 text-slate-500" />
-                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{(result.processing_time || 0.8).toFixed(2)}s Latency</span>
+                                                    <Clock className="h-3 w-3 text-muted-foreground" />
+                                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{(result.processing_time || 0.8).toFixed(2)}s Latency</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -467,11 +526,11 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
 
                                     {/* Confidence Metrics */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="glass-panel p-5 rounded-2xl space-y-4 border-white/5">
+                                        <div className="health-card p-5 space-y-4 bg-card/95 backdrop-blur-sm">
                                             <div className="flex justify-between items-end">
                                                 <div className="space-y-1">
-                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Statistical Certainty</p>
-                                                    <p className="text-2xl font-black text-white">{(result.confidence * 100).toFixed(1)}%</p>
+                                                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Statistical Certainty</p>
+                                                    <p className="text-2xl font-black text-foreground">{(result.confidence * 100).toFixed(1)}%</p>
                                                 </div>
                                                 {result.confidence_metrics && (
                                                     <ConfidenceBadge
@@ -489,8 +548,8 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                             </div>
                                         </div>
 
-                                        <div className="glass-panel p-5 rounded-2xl flex flex-col justify-center gap-3 border-white/5">
-                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Explainable Heatmap</p>
+                                        <div className="health-card p-5 flex flex-col justify-center gap-3 bg-card/95 backdrop-blur-sm">
+                                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Explainable Heatmap</p>
                                             <div className="flex items-center gap-3">
                                                 {result.explanation_url ? (
                                                     <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-bold animate-pulse">
@@ -519,14 +578,17 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         {result.findings?.length > 0 && (
                                             <div className="space-y-4">
-                                                <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                                <h4 className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
                                                     <Stethoscope className="h-4 w-4 text-violet-400" />
                                                     Clinical Findings
                                                 </h4>
                                                 <div className="space-y-2">
                                                     {result.findings.map((f: string, i: number) => (
-                                                        <div key={i} className="group p-3 rounded-xl bg-white/5 border border-white/5 hover:border-violet-500/30 transition-colors">
-                                                            <p className="text-xs text-slate-300 leading-relaxed group-hover:text-white transition-colors">{f}</p>
+                                                        <div key={i} className="group p-3.5 rounded-xl bg-card border border-border/40 hover:border-violet-500/30 transition-all shadow-sm hover:shadow-md">
+                                                            <p className="text-xs text-muted-foreground leading-relaxed group-hover:text-foreground transition-colors font-medium flex gap-2">
+                                                                <span className="text-violet-500 mt-0.5">•</span>
+                                                                {f}
+                                                            </p>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -536,25 +598,25 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                         <div className="space-y-6">
                                             {/* Historical Comparison */}
                                             {previousScan && (
-                                                <div className="glass-panel p-5 rounded-3xl border-violet-500/20 bg-violet-500/5 relative overflow-hidden animate-in slide-in-from-right-4 duration-700 delay-500">
+                                                <div className="health-card p-5 rounded-3xl border-violet-500/20 bg-gradient-to-br from-violet-500/5 to-transparent relative overflow-hidden animate-in slide-in-from-right-4 duration-700 delay-500">
                                                     <div className="absolute top-0 right-0 p-4 opacity-10">
                                                         <Clock className="h-12 w-12 text-violet-300" />
                                                     </div>
-                                                    <h4 className="text-[11px] font-black text-violet-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                                    <h4 className="text-[11px] font-bold text-violet-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                                                         Longitudinal Contrast
                                                     </h4>
                                                     <div className="flex gap-4 items-start">
-                                                        <div className="w-14 h-14 rounded-xl border border-white/10 overflow-hidden shrink-0 group hover:scale-110 transition-transform duration-500">
-                                                            <img src={previousScan.imageUrl} className="w-full h-full object-cover grayscale opacity-60 group-hover:opacity-100 group-hover:grayscale-0 transition-all" />
+                                                        <div className="w-14 h-14 rounded-xl border border-border/20 overflow-hidden shrink-0 group hover:scale-110 transition-transform duration-500 shadow-sm">
+                                                            <img src={previousScan.imageUrl} className="w-full h-full object-cover grayscale opacity-80 group-hover:opacity-100 group-hover:grayscale-0 transition-all" />
                                                         </div>
                                                         <div className="space-y-1 mt-1">
-                                                            <p className="text-[10px] font-black text-white uppercase">{previousScan.diagnosis}</p>
-                                                            <p className="text-[9px] text-slate-500 italic">Scan date: {new Date(previousScan.createdAt).toLocaleDateString()}</p>
+                                                            <p className="text-[10px] font-bold text-foreground uppercase">{previousScan.diagnosis}</p>
+                                                            <p className="text-[9px] text-muted-foreground italic">Scan date: {new Date(previousScan.createdAt).toLocaleDateString()}</p>
                                                         </div>
                                                     </div>
                                                     {comparisonNote && (
-                                                        <div className="mt-4 p-3 rounded-xl bg-white/5 border border-white/5 border-l-violet-500 border-l-2">
-                                                            <p className="text-[10px] text-violet-200 leading-relaxed italic line-clamp-2">“{comparisonNote}”</p>
+                                                        <div className="mt-4 p-3 rounded-xl bg-card/50 border border-violet-500/10 border-l-violet-500 border-l-2">
+                                                            <p className="text-[10px] text-muted-foreground leading-relaxed italic line-clamp-2">“{comparisonNote}”</p>
                                                         </div>
                                                     )}
                                                 </div>
@@ -575,17 +637,18 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                     </div>
 
                                     {/* Action Footers */}
-                                    <div className="pt-6 border-t border-white/5 flex flex-col md:flex-row gap-4">
+                                    <div className="pt-6 border-t border-border/20 flex flex-col md:flex-row gap-4">
                                         {!feedbackSent && (
                                             <div className="flex-1 space-y-3">
-                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Human-in-the-Loop Validation</p>
+                                                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Human-in-the-Loop Validation</p>
                                                 <div className="flex flex-wrap gap-2">
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
-                                                        className="h-9 px-4 rounded-xl border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                                                        className="h-9 px-4 rounded-xl border-emerald-500/20 bg-emerald-500/5 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-500 hover:border-emerald-500/30 transition-all font-semibold"
                                                         onClick={() => handleFeedback(result.prediction)}
                                                     >
+                                                        <CheckCircle2 className="mr-2 h-3.5 w-3.5" />
                                                         Confirm Detection
                                                     </Button>
                                                     {getPossibleLabels().filter(l => l !== result.prediction).map(l => (
@@ -593,7 +656,7 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                                                             key={l}
                                                             size="sm"
                                                             variant="outline"
-                                                            className="h-9 px-4 rounded-xl border-white/10 text-slate-400 hover:text-white transition-colors"
+                                                            className="h-9 px-4 rounded-xl border-border/40 text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-all font-medium"
                                                             onClick={() => handleFeedback(l)}
                                                         >
                                                             Mark as {l}

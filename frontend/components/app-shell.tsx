@@ -1,6 +1,4 @@
-"use client"
-
-import { Sidebar } from "@/components/sidebar"
+import { Navbar } from "@/components/navbar"
 
 export function AppShell({
   user,
@@ -10,9 +8,9 @@ export function AppShell({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar user={user} />
-      <main className="relative z-10 flex-1 overflow-auto min-w-0 bg-gradient-to-br from-background via-background to-primary/[0.02]">
+    <div className="flex flex-col min-h-screen bg-background">
+      <Navbar user={user} />
+      <main className="relative z-10 flex-1 overflow-auto bg-gradient-to-br from-background via-background to-primary/[0.02] pt-24 lg:pt-28 pb-12">
         {children}
       </main>
     </div>

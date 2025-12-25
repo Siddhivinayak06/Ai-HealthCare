@@ -14,7 +14,7 @@ export const db = drizzle(sql, { schema });
 export type Patient = InferSelectModel<typeof schema.patients>;
 export type HealthRecord = InferSelectModel<typeof schema.healthRecords>;
 export type Report = InferSelectModel<typeof schema.reports>;
-export type ImageAnalysis = InferSelectModel<typeof schema.imageAnalyses>;
+
 export type RiskPrediction = InferSelectModel<typeof schema.riskPredictions>;
 export type ActivityLog = InferSelectModel<typeof schema.activityLog>;
 export type UserSettings = InferSelectModel<typeof schema.userSettings>;

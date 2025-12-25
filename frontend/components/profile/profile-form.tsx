@@ -42,47 +42,60 @@ export function ProfileForm({ user }: ProfileFormProps) {
     }
 
     return (
-        <BentoCard>
-            <div className="mb-6">
-                <h3 className="text-lg font-semibold text-card-foreground">Personal Information</h3>
-                <p className="text-sm text-muted-foreground mt-1">Update your personal details here.</p>
+        <div className="health-card p-8">
+            <div className="mb-8">
+                <h3 className="text-xl font-bold text-foreground">Personal Information</h3>
+                <p className="text-sm text-muted-foreground mt-1">Update your account details and profile information.</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-2">
-                    <Label htmlFor="name">Full Name</Label>
+                    <Label htmlFor="name" className="text-sm font-semibold text-foreground/80">Full Name</Label>
                     <Input
                         id="name"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="John Doe"
+                        className="h-12 bg-secondary/30 border-border/50 focus:border-primary/50 transition-all duration-300 input-enhanced"
                     />
                 </div>
 
                 <div className="space-y-2">
-                    <Label htmlFor="email">Email Address</Label>
+                    <Label htmlFor="email" className="text-sm font-semibold text-foreground/80">Email Address</Label>
                     <Input
                         id="email"
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="john@example.com"
+                        className="h-12 bg-secondary/30 border-border/50 focus:border-primary/50 transition-all duration-300 input-enhanced"
                     />
                 </div>
 
                 {message && (
-                    <div className={`p-3 rounded-lg text-sm ${message.type === 'success' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
+                    <div className={`p-4 rounded-xl text-sm font-medium border flex items-center gap-3 animate-in fade-in slide-in-from-top-2 ${message.type === 'success'
+                            ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                            : 'bg-destructive/10 text-destructive border-destructive/20'
+                        }`}>
+                        <div className={`h-2 w-2 rounded-full ${message.type === 'success' ? 'bg-emerald-500' : 'bg-destructive'}`} />
                         {message.text}
                     </div>
                 )}
 
-                <div className="flex justify-end">
-                    <Button type="submit" disabled={loading}>
-                        {loading && <LoaderIcon className="mr-2 h-4 w-4 animate-spin" />}
-                        Save Changes
+                <div className="flex justify-end pt-4">
+                    <Button
+                        type="submit"
+                        disabled={loading}
+                        className="h-12 px-8 btn-gradient rounded-xl font-bold"
+                    >
+                        {loading ? (
+                            <LoaderIcon className="mr-2 h-5 w-5 animate-spin" />
+                        ) : (
+                            "Save Changes"
+                        )}
                     </Button>
                 </div>
             </form>
-        </BentoCard>
+        </div>
     )
 }

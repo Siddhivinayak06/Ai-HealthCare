@@ -35,17 +35,13 @@ export async function RecentAnalyses() {
     analyses.length > 0
       ? analyses.map((a) => ({
         id: a.id,
-        patientName:
-          (a as { first_name?: string; last_name?: string }).first_name &&
-            (a as { first_name?: string; last_name?: string }).last_name
-            ? `${(a as { first_name?: string }).first_name} ${(a as { last_name?: string }).last_name}`
-            : "Unknown Patient",
-        type: a.scan_type,
+        patientName: a.patientName || "Unknown Patient",
+        type: a.scanType || "Scan",
         status: (a.status as "completed" | "processing" | "pending") || "completed",
         confidence: a.confidence || 0,
         severity: (a.severity?.toLowerCase() as any) || "normal",
         finding: a.diagnosis || "Analysis complete",
-        timestamp: formatTime(a.created_at),
+        timestamp: formatTime(a.createdAt),
       }))
       : [
         {

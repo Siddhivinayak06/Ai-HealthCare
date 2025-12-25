@@ -3,7 +3,7 @@ import { decrypt, updateSession } from "@/lib/auth";
 
 // ==================== PAGE ROUTES ====================
 // Routes that require authentication
-const protectedRoutes = ["/dashboard", "/analysis", "/risk", "/reports", "/patients", "/model-monitoring", "/"];
+const protectedRoutes = ["/dashboard", "/analysis", "/risk", "/reports", "/patients", "/model-monitoring", "/", "/profile"];
 // Routes that require doctor role
 const doctorOnlyRoutes = ["/model-monitoring", "/patients"];
 // Public routes

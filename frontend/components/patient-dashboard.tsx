@@ -92,7 +92,7 @@ export function PatientDashboard({ user }: { user: any }) {
             {/* Header Section */}
             <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div className="space-y-2">
-                    <h1 className="text-4xl font-bold tracking-tight text-gradient-primary">My Health Dashboard</h1>
+                    <h1 className="text-4xl font-bold tracking-tight text-primary">My Health Dashboard</h1>
                     <p className="text-muted-foreground text-lg">Welcome back! Here's your latest health overview.</p>
                 </div>
                 <div className="flex gap-3">
