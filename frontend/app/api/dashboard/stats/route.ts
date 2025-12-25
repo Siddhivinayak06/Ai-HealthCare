@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { patients, imageAnalyses, riskPredictions } from "@/lib/schema";
+import { patients, scans, riskPredictions } from "@/lib/schema";
 import { eq, count, gte, and } from "drizzle-orm";
 import { requireAuth, authErrorResponse } from "@/lib/auth";
 
@@ -18,20 +18,20 @@ export async function GET(request: NextRequest) {
             .from(patients)
             .where(eq(patients.userId, user.id));
 
-        // Get analysis count for this user
-        const analysisResult = await db
+        // Get scan count for this user
+        const scanResult = await db
             .select({ count: count() })
-            .from(imageAnalyses)
-            .where(eq(imageAnalyses.userId, user.id));
+            .from(scans)
+            .where(eq(scans.uploadedBy, user.id));
 
-        // Get recent analyses (last 30 days)
-        const recentAnalysesResult = await db
+        // Get recent scans (last 30 days)
+        const recentScansResult = await db
             .select({ count: count() })
-            .from(imageAnalyses)
+            .from(scans)
             .where(
                 and(
-                    eq(imageAnalyses.userId, user.id),
-                    gte(imageAnalyses.createdAt, thirtyDaysAgo)
+                    eq(scans.uploadedBy, user.id),
+                    gte(scans.createdAt, thirtyDaysAgo)
                 )
             );
 
@@ -43,8 +43,8 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json({
             totalPatients: patientResult[0]?.count || 0,
-            totalAnalyses: analysisResult[0]?.count || 0,
-            recentAnalyses: recentAnalysesResult[0]?.count || 0,
+            totalAnalyses: scanResult[0]?.count || 0,
+            recentAnalyses: recentScansResult[0]?.count || 0,
             totalPredictions: predictionResult[0]?.count || 0,
         });
     } catch (error) {

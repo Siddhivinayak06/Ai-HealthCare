@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { imageAnalyses, riskPredictions, auditLogs } from "@/lib/schema";
+import { scans, diagnoses, riskPredictions, auditLogs } from "@/lib/schema";
 import { getSession } from "@/lib/auth";
 import { triageCase } from "@/services/triage";
 import { logActivity } from "./activity";
@@ -23,21 +23,27 @@ export async function saveImageAnalysis(data: {
     if (!user) throw new Error("Not authorized");
 
     try {
-        const result = await db.insert(imageAnalyses).values({
-            userId: user.id,
-            patientId: data.patientId || null,
+        // 1. Create Scan record
+        const scanResult = await db.insert(scans).values({
+            uploadedBy: user.id,
+            patientId: data.patientId || "",
             scanType: data.scanType,
-            imageUrl: data.imageUrl || null,
-            diagnosis: data.diagnosis,
-            confidence: data.confidence.toString(),
-            severity: data.severity,
-            findings: data.findings,
-            recommendations: data.recommendations,
-            processingTime: data.processingTime.toString(),
+            imageUrl: data.imageUrl || "",
+        }).returning();
+
+        const newScan = scanResult[0];
+
+        // 2. Create AI Diagnosis record
+        const diagnosisResult = await db.insert(diagnoses).values({
+            scanId: newScan.id,
+            predictedCondition: data.diagnosis,
+            confidenceScore: data.confidence.toString(),
+            riskLevel: data.severity,
+            explanation: data.findings,
             modelVersion: data.modelVersion,
         }).returning();
 
-        const newAnalysis = result[0];
+        const newDiagnosis = diagnosisResult[0];
 
         // AI Triage
         const triageResult = triageCase({
@@ -53,7 +59,7 @@ export async function saveImageAnalysis(data: {
             userId: user.id,
             action: 'PREDICTION',
             entityType: 'IMAGE_ANALYSIS',
-            entityId: newAnalysis.id,
+            entityId: newScan.id,
             findings: data.findings,
             confidence: data.confidence.toString(),
         });
@@ -61,12 +67,12 @@ export async function saveImageAnalysis(data: {
         await logActivity("Image analysis completed", "analysis", {
             scanType: data.scanType,
             severity: data.severity,
-            analysisId: newAnalysis.id,
+            analysisId: newScan.id,
             priority: triageResult.priority
         });
 
         revalidatePath("/analysis");
-        return { success: true, data: { ...newAnalysis, triage: triageResult } };
+        return { success: true, data: { ...newScan, ...newDiagnosis, triage: triageResult } };
     } catch (error) {
         console.error("Save image analysis error:", error);
         return { success: false, error: "Failed to save analysis" };

@@ -415,30 +415,6 @@ export function RiskSimulator() {
                                                 </span>
                                                 <span className="pt-0.5 leading-relaxed flex-1">{rec.text}</span>
                                             </li>
-                                            {rec.action === "appointment" && (
-                                                <Button
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    className="w-full h-8 text-xs bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 border border-violet-500/20 gap-2"
-                                                    onClick={async () => {
-                                                        const { createAppointment } = await import("@/app/actions/appointments")
-                                                        const now = new Date()
-                                                        const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-                                                        await createAppointment({
-                                                            patientId: selectedPatientId || "draft",
-                                                            title: `AI Referral: ${rec.text.split(':')[0]}`,
-                                                            startTime: nextWeek.toISOString(),
-                                                            endTime: new Date(nextWeek.getTime() + 30 * 60 * 1000).toISOString(),
-                                                            notes: `AI Risk Assessment recommended: ${rec.text}`,
-                                                            type: "specialist"
-                                                        })
-                                                        setSaveMessage("Referral scheduled for next week!")
-                                                    }}
-                                                >
-                                                    <Stethoscope className="h-3 w-3" />
-                                                    Schedule Follow-up
-                                                </Button>
-                                            )}
                                         </div>
                                     ))}
                                 </ul>

@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
                 entityType: auditLogs.entityType,
                 entityId: auditLogs.entityId,
                 findings: auditLogs.findings,
-                confidenceScore: auditLogs.confidenceScore,
+                confidenceScore: auditLogs.confidence,
                 doctorOverride: auditLogs.doctorOverride,
                 overrideReason: auditLogs.overrideReason,
                 feedback: auditLogs.feedback,

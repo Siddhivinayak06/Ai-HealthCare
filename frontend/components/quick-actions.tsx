@@ -9,7 +9,7 @@ const actions = [
     name: "New Scan",
     description: "Upload medical images",
     icon: ScanIcon,
-    href: "/imaging",
+    href: "/analysis",
     color: "bg-primary/10 text-primary hover:bg-primary/20",
   },
   {

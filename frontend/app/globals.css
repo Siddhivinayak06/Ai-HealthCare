@@ -188,10 +188,74 @@
   /* Premium Glassmorphism */
   .glass-panel {
     @apply border border-white/10 bg-white/5 backdrop-blur-xl transition-all duration-300;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+
+  .glass-card {
+    @apply relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur-md transition-all duration-500;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1), inset 0 0 20px rgba(255, 255, 255, 0.05);
+  }
+
+  .glass-card:hover {
+    @apply border-white/20 bg-white/10;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2), inset 0 0 30px rgba(255, 255, 255, 0.1);
+    transform: translateY(-4px);
+  }
+
+  .glass-button {
+    @apply relative flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm transition-all duration-300 hover:bg-white/10 hover:border-white/20 active:scale-95;
   }
 
   .glass-panel-heavy {
     @apply border border-white/20 bg-white/10 backdrop-blur-2xl shadow-2xl;
+  }
+
+  /* Dynamic Backgrounds */
+  .bg-aura-drifting {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .bg-aura-drifting::before {
+    content: "";
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle at center, oklch(from var(--primary) l c h / 0.1) 0%, transparent 40%);
+    animation: drift 20s linear infinite;
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  @keyframes drift {
+    0% {
+      transform: rotate(0deg) translate(0, 0);
+    }
+
+    33% {
+      transform: rotate(120deg) translate(5%, 5%);
+    }
+
+    66% {
+      transform: rotate(240deg) translate(-5%, 2%);
+    }
+
+    100% {
+      transform: rotate(360deg) translate(0, 0);
+    }
+  }
+
+  /* Typography Enhancements */
+  .text-premium-sm {
+    @apply text-sm leading-relaxed tracking-wide;
+    font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+  }
+
+  .text-premium-lg {
+    @apply text-lg font-medium leading-snug tracking-tight;
+    font-feature-settings: "cv02", "cv03", "cv04", "ss01";
   }
 
   /* Medical Semantic Gradients */
@@ -248,7 +312,7 @@
 
   /* Healthcare Semantic Cards */
   .health-card {
-    @apply relative overflow-hidden rounded-2xl border border-border/50 bg-card/80 backdrop-blur-sm transition-all duration-300;
+    @apply relative overflow-hidden rounded-2xl border border-border/10 bg-card/40 backdrop-blur-md transition-all duration-500;
   }
 
   .health-card::before {
@@ -265,29 +329,30 @@
   }
 
   .health-card:hover {
-    transform: translateY(-3px);
+    @apply border-border/30 bg-card/60;
+    transform: translateY(-3px) scale(1.01);
     box-shadow: 0 20px 50px -15px oklch(from var(--primary) l c h / 0.2);
   }
 
   /* Metric Card Variants */
   .metric-card-heart {
-    background: linear-gradient(135deg, oklch(0.55 0.2 10 / 0.08) 0%, transparent 70%);
-    border-color: oklch(0.55 0.2 10 / 0.2);
+    background: linear-gradient(135deg, oklch(0.55 0.2 10 / 0.05) 0%, transparent 70%);
+    border-color: oklch(0.55 0.2 10 / 0.1);
   }
 
   .metric-card-pulse {
-    background: linear-gradient(135deg, oklch(0.6 0.2 280 / 0.08) 0%, transparent 70%);
-    border-color: oklch(0.6 0.2 280 / 0.2);
+    background: linear-gradient(135deg, oklch(0.6 0.2 280 / 0.05) 0%, transparent 70%);
+    border-color: oklch(0.6 0.2 280 / 0.1);
   }
 
   .metric-card-vitals {
-    background: linear-gradient(135deg, oklch(0.6 0.18 200 / 0.08) 0%, transparent 70%);
-    border-color: oklch(0.6 0.18 200 / 0.2);
+    background: linear-gradient(135deg, oklch(0.6 0.18 200 / 0.05) 0%, transparent 70%);
+    border-color: oklch(0.6 0.18 200 / 0.1);
   }
 
   .metric-card-calendar {
-    background: linear-gradient(135deg, oklch(0.7 0.15 50 / 0.08) 0%, transparent 70%);
-    border-color: oklch(0.7 0.15 50 / 0.2);
+    background: linear-gradient(135deg, oklch(0.7 0.15 50 / 0.05) 0%, transparent 70%);
+    border-color: oklch(0.7 0.15 50 / 0.1);
   }
 
   /* Icon Containers */
@@ -375,6 +440,18 @@
     }
   }
 
+  @keyframes ripple {
+    0% {
+      transform: scale(0.95);
+      opacity: 1;
+    }
+
+    100% {
+      transform: scale(1.05);
+      opacity: 0;
+    }
+  }
+
   .animate-float {
     animation: float 6s ease-in-out infinite;
   }
@@ -385,12 +462,34 @@
     animation: shimmer 3s ease-in-out infinite;
   }
 
+  .animate-ripple {
+    position: relative;
+  }
+
+  .animate-ripple::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: inherit;
+    border: 1px solid oklch(from var(--primary) l c h / 0.5);
+    animation: ripple 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+
   /* Gradient Text Variants */
   .text-gradient-primary {
-    background: linear-gradient(135deg, var(--primary) 0%, oklch(0.6 0.22 280) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    @apply bg-gradient-to-r from-primary via-violet-500 to-cyan-500 bg-clip-text text-transparent;
+    background-size: 200% auto;
+    animation: text-flow 8s linear infinite;
+  }
+
+  @keyframes text-flow {
+    0% {
+      background-position: 0% 50%;
+    }
+
+    100% {
+      background-position: 200% 50%;
+    }
   }
 
   .text-gradient-health {
@@ -402,14 +501,19 @@
 
   /* Premium Button Styles */
   .btn-gradient {
-    @apply relative overflow-hidden bg-gradient-to-r from-violet-600 via-primary to-cyan-500 text-white font-semibold;
+    @apply relative overflow-hidden bg-gradient-to-r from-violet-600 via-primary to-cyan-500 text-white font-semibold shadow-xl;
     background-size: 200% auto;
-    transition: all 0.3s ease;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   }
 
   .btn-gradient:hover {
     background-position: right center;
-    box-shadow: 0 8px 25px -8px oklch(from var(--primary) l c h / 0.5);
+    box-shadow: 0 12px 30px -10px oklch(from var(--primary) l c h / 0.6);
+    transform: translateY(-2px);
+  }
+
+  .btn-gradient:active {
+    @apply scale-95;
   }
 
   .btn-glow {

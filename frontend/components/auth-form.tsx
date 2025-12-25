@@ -31,12 +31,12 @@ export function AuthForm({ mode }: AuthFormProps) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12 relative overflow-hidden">
-      {/* Background effects */}
-      <div className="absolute inset-0 bg-grid-pattern opacity-20" />
-      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-gradient-to-br from-primary/20 to-violet-500/10 rounded-full blur-3xl animate-float" />
-      <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-gradient-to-br from-success/15 to-cyan-500/10 rounded-full blur-3xl animate-float" style={{ animationDelay: '3s' }} />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/5 rounded-full blur-3xl" />
+    <div className="min-h-screen flex items-center justify-center bg-background/50 px-4 py-12 relative overflow-hidden">
+      {/* Background effects - more vibrant and premium */}
+      <div className="absolute inset-0 bg-grid-pattern opacity-10 pointer-events-none" />
+      <div className="absolute top-[-10%] left-[-10%] w-[800px] h-[800px] bg-gradient-to-br from-primary/10 via-primary/5 to-transparent rounded-full blur-[120px] pointer-events-none animate-float" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-gradient-to-tl from-accent/10 via-accent/5 to-transparent rounded-full blur-[100px] pointer-events-none animate-float" style={{ animationDelay: '3s' }} />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(circle_at_center,transparent_0%,rgba(var(--background),0.8)_100%)] pointer-events-none" />
 
       <div className="w-full max-w-md space-y-8 relative z-10">
         {/* Logo */}
@@ -54,9 +54,9 @@ export function AuthForm({ mode }: AuthFormProps) {
           </div>
         </div>
 
-        {/* Form Card - Bento styled */}
-        <div className="health-card p-8 backdrop-blur-xl">
-          <div className="space-y-2 text-center mb-8">
+        {/* Form Card - Premium Glassmorphism */}
+        <div className="bg-card/30 backdrop-blur-2xl rounded-3xl p-8 border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.1)] ring-1 ring-white/10">
+          <div className="space-y-2 text-center mb-8 pb-6 border-b border-white/5">
             <h2 className="text-2xl font-bold text-card-foreground">
               {isLogin ? "Welcome back" : "Create an account"}
             </h2>

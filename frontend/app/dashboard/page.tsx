@@ -11,11 +11,25 @@ import { getSession } from "@/lib/auth"
 import { getDashboardStats, getAnalyticsByMonth, getConditionBreakdown } from "@/app/actions/dashboard"
 
 import { PatientDashboard } from "@/components/patient-dashboard"
+import { getPatients, getPatientHealthRecords } from "@/app/actions/patients"
+import { getPatientPredictions } from "@/app/actions/dashboard"
+
+import { Patient, HealthRecord, AIInsight } from "@/lib/types/health"
 
 export default async function DashboardPage() {
     const { user } = await getSession()
 
     if (user?.role === "patient" || user?.role === "user") {
+        const patients = await getPatients()
+        const profile = patients?.[0]
+
+        const [records, predictions] = profile
+            ? await Promise.all([
+                getPatientHealthRecords(profile.id),
+                getPatientPredictions(3), // Limit to 3 for summary
+            ])
+            : [[], []]
+
         return (
             <div className="min-h-screen relative overflow-hidden">
                 {/* Background effects */}
@@ -24,7 +38,12 @@ export default async function DashboardPage() {
                 <div className="absolute bottom-20 right-1/4 w-96 h-96 bg-success/10 rounded-full blur-3xl animate-pulse delay-1000 pointer-events-none" />
 
                 <div className="relative p-4 lg:p-8 space-y-8">
-                    <PatientDashboard user={user} />
+                    <PatientDashboard
+                        user={user}
+                        initialProfile={profile as unknown as Patient}
+                        initialRecords={records as unknown as HealthRecord[]}
+                        initialPredictions={predictions as unknown as AIInsight[]}
+                    />
                     <AIAssistant />
                 </div>
             </div>
