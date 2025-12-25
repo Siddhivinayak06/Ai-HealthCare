@@ -91,13 +91,18 @@ export async function RecentAnalyses() {
       ]
 
   return (
-    <BentoCard size="lg">
+    <div className="health-card p-6">
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h3 className="text-lg font-semibold text-card-foreground">Recent Analyses</h3>
-          <p className="text-sm text-muted-foreground mt-1">Latest diagnostic results</p>
+        <div className="flex items-center gap-3">
+          <div className="icon-container icon-container-success h-10 w-10">
+            <ScanIcon className="h-4 w-4" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold">Recent Analyses</h3>
+            <p className="text-sm text-muted-foreground">Latest diagnostic results</p>
+          </div>
         </div>
-        <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+        <Badge className="bg-gradient-to-r from-primary/20 to-violet-500/20 text-primary border-primary/30 font-semibold px-3 py-1">
           {displayAnalyses.length} new
         </Badge>
       </div>
@@ -107,16 +112,23 @@ export async function RecentAnalyses() {
           <div
             key={analysis.id}
             className={cn(
-              "group flex items-center gap-4 p-4 rounded-xl transition-all duration-200 cursor-pointer",
-              "bg-secondary/30 hover:bg-secondary/60 border border-transparent hover:border-border/50",
+              "group flex items-center gap-4 p-4 rounded-xl transition-all duration-300 cursor-pointer border-l-4",
+              "bg-secondary/20 hover:bg-secondary/40 border border-border/30 hover:border-border/50",
+              analysis.status === "completed" && (analysis.severity === "high" || analysis.severity === "critical")
+                ? "border-l-rose-500"
+                : analysis.status === "completed" && analysis.severity === "moderate"
+                  ? "border-l-amber-500"
+                  : analysis.status === "processing"
+                    ? "border-l-violet-500"
+                    : "border-l-emerald-500"
             )}
           >
             {/* Icon */}
             <div
               className={cn(
-                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
-                analysis.status === "completed" && "bg-success/10 text-success",
-                analysis.status === "processing" && "bg-warning/10 text-warning",
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-all group-hover:scale-105",
+                analysis.status === "completed" && "bg-emerald-500/10 text-emerald-500",
+                analysis.status === "processing" && "bg-violet-500/10 text-violet-500",
                 analysis.status === "pending" && "bg-muted text-muted-foreground",
               )}
             >
@@ -132,37 +144,47 @@ export async function RecentAnalyses() {
             {/* Content */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <p className="font-semibold text-card-foreground truncate">{analysis.patientName}</p>
+                <p className="font-semibold text-card-foreground truncate group-hover:text-primary transition-colors">{analysis.patientName}</p>
                 <Badge
                   variant="outline"
                   className={cn(
-                    "text-[10px] h-4 px-1.5 font-bold",
-                    analysis.status === "processing" ? "border-slate-500 text-slate-500" :
-                      (analysis.severity === "high" || analysis.severity === "critical") ? "border-rose-500/50 bg-rose-500/10 text-rose-500" :
-                        (analysis.severity === "moderate") ? "border-orange-500/50 bg-orange-500/10 text-orange-500" :
-                          "border-emerald-500/50 bg-emerald-500/10 text-emerald-500"
+                    "text-[10px] h-5 px-2 font-bold border-none",
+                    analysis.status === "processing" ? "bg-violet-500/10 text-violet-400" :
+                      (analysis.severity === "high" || analysis.severity === "critical") ? "bg-rose-500/15 text-rose-500" :
+                        (analysis.severity === "moderate") ? "bg-amber-500/15 text-amber-500" :
+                          "bg-emerald-500/15 text-emerald-500"
                   )}
                 >
-                  {analysis.status === "processing" ? "Pending" :
-                    (analysis.severity === "high" || analysis.severity === "critical") ? "🔴 CRITICAL" :
-                      (analysis.severity === "moderate") ? "🟠 MODERATE" : "🟢 STABLE"}
+                  {analysis.status === "processing" ? "⏳ Processing" :
+                    (analysis.severity === "high" || analysis.severity === "critical") ? "🔴 Critical" :
+                      (analysis.severity === "moderate") ? "🟠 Moderate" : "🟢 Normal"}
                 </Badge>
               </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-xs text-muted-foreground">{analysis.type}</span>
-                <span className="text-xs text-muted-foreground">•</span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-muted-foreground font-medium">{analysis.type}</span>
+                <span className="text-xs text-muted-foreground/50">•</span>
                 <p className="text-sm text-muted-foreground truncate">{analysis.finding}</p>
               </div>
             </div>
 
             {/* Stats */}
             <div className="text-right shrink-0">
-              {analysis.confidence > 0 && <p className="text-sm font-bold text-primary">{analysis.confidence}%</p>}
-              <p className="text-xs text-muted-foreground">{analysis.timestamp}</p>
+              {analysis.confidence > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <div className="h-1.5 w-12 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-primary to-violet-500 rounded-full transition-all duration-500"
+                      style={{ width: `${analysis.confidence}%` }}
+                    />
+                  </div>
+                  <p className="text-sm font-bold text-primary">{analysis.confidence}%</p>
+                </div>
+              )}
+              <p className="text-[10px] text-muted-foreground mt-1">{analysis.timestamp}</p>
             </div>
           </div>
         ))}
       </div>
-    </BentoCard>
+    </div>
   )
 }

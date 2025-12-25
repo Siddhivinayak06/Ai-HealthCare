@@ -19,9 +19,9 @@ export default async function DashboardPage() {
         return (
             <div className="min-h-screen relative overflow-hidden">
                 {/* Background effects */}
-                <div className="absolute inset-0 bg-grid-pattern opacity-30" />
-                <div className="absolute top-20 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-pulse" />
-                <div className="absolute bottom-20 right-1/4 w-96 h-96 bg-success/10 rounded-full blur-3xl animate-pulse delay-1000" />
+                <div className="absolute inset-0 bg-grid-pattern opacity-30 pointer-events-none" />
+                <div className="absolute top-20 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-pulse pointer-events-none" />
+                <div className="absolute bottom-20 right-1/4 w-96 h-96 bg-success/10 rounded-full blur-3xl animate-pulse delay-1000 pointer-events-none" />
 
                 <div className="relative p-4 lg:p-8 space-y-8">
                     <PatientDashboard user={user} />
@@ -41,9 +41,9 @@ export default async function DashboardPage() {
     return (
         <div className="min-h-screen relative overflow-hidden">
             {/* Background effects */}
-            <div className="absolute inset-0 bg-grid-pattern opacity-20" />
-            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-bl from-primary/15 via-primary/5 to-transparent rounded-full blur-3xl" />
-            <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-success/10 via-success/5 to-transparent rounded-full blur-3xl" />
+            <div className="absolute inset-0 bg-grid-pattern opacity-20 pointer-events-none" />
+            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-bl from-primary/15 via-primary/5 to-transparent rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-success/10 via-success/5 to-transparent rounded-full blur-3xl pointer-events-none" />
 
             <div className="relative p-4 lg:p-8 space-y-8">
                 <DashboardHeader

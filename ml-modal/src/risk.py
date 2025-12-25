@@ -82,27 +82,75 @@ def predict_patient_risk(model, data):
     }])
     input_df = preprocess_risk_features(input_df)
     
-    # Handle version mismatch if any or corrupted model
     try:
         risk_prob = model.predict_proba(input_df)[0][1]
     except Exception as e:
         print(f"❌ Risk Model Prediction Error: {e}")
-        # Fallback to simple prediction if feature names mismatch or model logic fails
         return {"error": f"Model prediction failed: {str(e)}"}
 
     risk_level = "High" if risk_prob > 0.7 else "Medium" if risk_prob > 0.35 else "Low"
     
-    recs = []
-    if risk_level == "High":
-        recs.append("🔴 Urgent: Clinical evaluation for cardiovascular/metabolic risks required")
-    elif risk_level == "Medium":
-        recs.append("🟡 Recommended: Lifestyle modifications and follow-up in 3 months")
-    else:
-        recs.append("🟢 Normal: Continue standard health monitoring")
+    # --- Actionable Interventions Mapping ---
+    factors_identified = []
+    interventions = []
+    
+    # helper to add structured interventions
+    def add_int(text, itype, priority):
+        interventions.append({
+            "text": text,
+            "type": itype,
+            "priority": priority,
+            "action": "appointment" if itype == "clinical" else "manual"
+        })
+
+    # 1. Weight/BMI Management
+    if data.bmi >= 30:
+        factors_identified.append("Obesity (BMI ≥ 30)")
+        add_int("Referral: Medical Nutrition Therapy & Weight Management Program", "clinical", "high")
+    elif data.bmi >= 25:
+        factors_identified.append("Overweight (BMI ≥ 25)")
+        add_int("Lifestyle: Caloric deficit diet and increased physical activity", "lifestyle", "medium")
+
+    # 2. Blood Pressure
+    if data.sys_bp >= 140 or data.dia_bp >= 90:
+        factors_identified.append("Stage 2 Hypertension")
+        add_int("Clinical: Specialist consultation for antihypertensive medication", "clinical", "high")
+        add_int("Monitoring: Daily blood pressure charting", "monitoring", "high")
+    elif data.sys_bp >= 130 or data.dia_bp >= 80:
+        factors_identified.append("Stage 1 Hypertension")
+        add_int("Dietary: DASH diet (Low Sodium intake < 2300mg/day)", "lifestyle", "medium")
+
+    # 3. Glycemic Control
+    if data.glucose >= 126:
+        factors_identified.append("Hyperglycemia (Diabetic Range)")
+        add_int("Referral: Endocrinologist consultation & HbA1c testing", "clinical", "high")
+    elif data.glucose >= 100:
+        factors_identified.append("Prediabetic Glucose Levels")
+        add_int("Dietary: Intensive glucose monitoring and carbohydrate restriction", "monitoring", "medium")
+
+    # 4. Cholesterol
+    if data.cholesterol >= 240:
+        factors_identified.append("Hypercholesterolemia")
+        add_int("Clinical: Statin therapy evaluation and lipid panel follow-up", "clinical", "high")
+
+    # 5. Lifestyle
+    if data.smoker:
+        factors_identified.append("Active Smoking")
+        add_int("Program: Immediate enrollment in Smoking Cessation pharmacotherapy", "clinical", "medium")
+
+    # Fallbacks
+    if not interventions:
+        if risk_level == "High":
+            add_int("Urgent: General clinical evaluation required", "clinical", "high")
+        elif risk_level == "Medium":
+            add_int("Recommended: Comprehensive wellness screening", "monitoring", "medium")
+        else:
+            add_int("Normal: Maintain current health monitoring protocols", "lifestyle", "low")
 
     return {
         "risk_score": float(risk_prob),
         "risk_level": risk_level,
-        "recommendation": recs,
+        "recommendation": interventions,
+        "factors": factors_identified,
         "features_analyzed": list(input_df.columns)
     }

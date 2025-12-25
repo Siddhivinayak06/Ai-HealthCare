@@ -16,7 +16,7 @@ export const createAuditLog = async (data: {
     entityType?: string;
     entityId?: string;
     findings?: any;
-    confidenceScore?: string | number;
+    confidence?: string | number;
     doctorOverride?: boolean;
     overrideReason?: string;
     feedback?: string;
@@ -27,7 +27,7 @@ export const createAuditLog = async (data: {
         entityType: data.entityType,
         entityId: data.entityId,
         findings: data.findings,
-        confidenceScore: data.confidenceScore?.toString(),
+        confidence: data.confidence?.toString(),
         doctorOverride: data.doctorOverride,
         overrideReason: data.overrideReason,
         feedback: data.feedback,

@@ -1,14 +1,20 @@
-import type React from "react"
-import { getSession } from "@/lib/auth"
+"use client"
+
 import { Sidebar } from "@/components/sidebar"
 
-export async function AppShell({ children }: { children: React.ReactNode }) {
-  const { user } = await getSession()
-
+export function AppShell({
+  user,
+  children,
+}: {
+  user: any
+  children: React.ReactNode
+}) {
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex min-h-screen bg-background">
       <Sidebar user={user} />
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="relative z-10 flex-1 overflow-auto min-w-0 bg-gradient-to-br from-background via-background to-primary/[0.02]">
+        {children}
+      </main>
     </div>
   )
 }

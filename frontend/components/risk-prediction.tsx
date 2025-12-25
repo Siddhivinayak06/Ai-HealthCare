@@ -37,100 +37,106 @@ export function RiskPredictionCard({ predictions }: RiskPredictionProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {predictions.map((prediction, idx) => (
-        <Card
+        <div
           key={idx}
           className={cn(
-            "bg-card border-border overflow-hidden",
-            prediction.severity === "critical" && "border-destructive/50",
-            prediction.severity === "high" && "border-warning/50",
+            "health-card overflow-hidden transition-all duration-300 hover:shadow-lg",
+            prediction.severity === "critical" && "border-rose-500/30 hover:shadow-rose-500/10",
+            prediction.severity === "high" && "border-amber-500/30 hover:shadow-amber-500/10",
+            prediction.severity === "moderate" && "border-primary/30 hover:shadow-primary/10",
+            prediction.severity === "low" && "border-emerald-500/30 hover:shadow-emerald-500/10",
           )}
         >
-          <CardHeader className="pb-2">
+          {/* Header */}
+          <div className="p-5 border-b border-border/30">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 <div
                   className={cn(
-                    "flex h-10 w-10 items-center justify-center rounded-lg",
-                    prediction.severity === "low" && "bg-success/10",
-                    prediction.severity === "moderate" && "bg-primary/10",
-                    prediction.severity === "high" && "bg-warning/10",
-                    prediction.severity === "critical" && "bg-destructive/10",
+                    "flex h-12 w-12 items-center justify-center rounded-xl transition-transform hover:scale-105",
+                    prediction.severity === "low" && "bg-emerald-500/15 text-emerald-500",
+                    prediction.severity === "moderate" && "bg-primary/15 text-primary",
+                    prediction.severity === "high" && "bg-amber-500/15 text-amber-500",
+                    prediction.severity === "critical" && "bg-rose-500/15 text-rose-500",
                   )}
                 >
-                  <prediction.icon
-                    className={cn(
-                      "h-5 w-5",
-                      prediction.severity === "low" && "text-success",
-                      prediction.severity === "moderate" && "text-primary",
-                      prediction.severity === "high" && "text-warning",
-                      prediction.severity === "critical" && "text-destructive",
-                    )}
-                  />
+                  <prediction.icon className="h-6 w-6" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg text-card-foreground">{prediction.condition}</CardTitle>
+                  <h3 className="text-lg font-semibold">{prediction.condition}</h3>
                   <p className="text-sm text-muted-foreground">Risk Assessment</p>
                 </div>
               </div>
-              <Badge
-                variant="secondary"
-                className={cn(
-                  prediction.severity === "low" && "bg-success/10 text-success",
-                  prediction.severity === "moderate" && "bg-primary/10 text-primary",
-                  prediction.severity === "high" && "bg-warning/10 text-warning",
-                  prediction.severity === "critical" && "bg-destructive/10 text-destructive",
+              <div className="flex items-center gap-2">
+                <Badge
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wide border-none",
+                    prediction.severity === "low" && "bg-emerald-500/15 text-emerald-500",
+                    prediction.severity === "moderate" && "bg-primary/15 text-primary",
+                    prediction.severity === "high" && "bg-amber-500/15 text-amber-500",
+                    prediction.severity === "critical" && "bg-rose-500/15 text-rose-500",
+                  )}
+                >
+                  <span className={cn(
+                    "inline-block h-1.5 w-1.5 rounded-full mr-2",
+                    prediction.severity === "low" && "bg-emerald-500",
+                    prediction.severity === "moderate" && "bg-primary",
+                    prediction.severity === "high" && "bg-amber-500 animate-pulse",
+                    prediction.severity === "critical" && "bg-rose-500 animate-pulse",
+                  )} />
+                  {prediction.severity} risk
+                </Badge>
+                {prediction.confidence_metrics && (
+                  <ConfidenceBadge
+                    confidence={prediction.confidence_metrics.confidence}
+                    uncertainty={prediction.confidence_metrics.uncertainty_level}
+                  />
                 )}
-              >
-                {prediction.severity} risk
-              </Badge>
-              {prediction.confidence_metrics && (
-                <ConfidenceBadge
-                  confidence={prediction.confidence_metrics.confidence}
-                  uncertainty={prediction.confidence_metrics.uncertainty_level}
-                />
-              )}
+              </div>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          </div>
+          <div className="p-5 space-y-5">
             {/* Risk Score */}
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-card-foreground">Risk Score</span>
+                <span className="text-sm font-medium">Risk Score</span>
                 <span
                   className={cn(
-                    "text-lg font-bold",
-                    prediction.risk <= 25 && "text-success",
+                    "text-2xl font-bold",
+                    prediction.risk <= 25 && "text-emerald-500",
                     prediction.risk > 25 && prediction.risk <= 50 && "text-primary",
-                    prediction.risk > 50 && prediction.risk <= 75 && "text-warning",
-                    prediction.risk > 75 && "text-destructive",
+                    prediction.risk > 50 && prediction.risk <= 75 && "text-amber-500",
+                    prediction.risk > 75 && "text-rose-500",
                   )}
                 >
                   {prediction.risk}%
                 </span>
               </div>
-              <Progress
-                value={prediction.risk}
-                className={cn(
-                  "h-3",
-                  prediction.risk <= 25 && "[&>div]:bg-success",
-                  prediction.risk > 25 && prediction.risk <= 50 && "[&>div]:bg-primary",
-                  prediction.risk > 50 && prediction.risk <= 75 && "[&>div]:bg-warning",
-                  prediction.risk > 75 && "[&>div]:bg-destructive",
-                )}
-              />
+              <div className="h-2.5 rounded-full bg-muted/50 overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-1000",
+                    prediction.risk <= 25 && "bg-gradient-to-r from-emerald-500 to-emerald-400",
+                    prediction.risk > 25 && prediction.risk <= 50 && "bg-gradient-to-r from-primary to-violet-500",
+                    prediction.risk > 50 && prediction.risk <= 75 && "bg-gradient-to-r from-amber-500 to-orange-400",
+                    prediction.risk > 75 && "bg-gradient-to-r from-rose-500 to-red-400",
+                  )}
+                  style={{ width: `${prediction.risk}%` }}
+                />
+              </div>
             </div>
 
             {/* Contributing Factors */}
-            <div>
-              <h5 className="text-sm font-medium text-card-foreground mb-2 flex items-center gap-2">
-                <AlertCircleIcon className="h-4 w-4 text-muted-foreground" />
+            <div className="space-y-3">
+              <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <AlertCircleIcon className="h-3.5 w-3.5" />
                 Contributing Factors
               </h5>
               <div className="flex flex-wrap gap-2">
                 {prediction.factors.map((factor, factorIdx) => (
-                  <Badge key={factorIdx} variant="outline" className="bg-secondary/50">
+                  <Badge key={factorIdx} variant="outline" className="bg-secondary/30 border-border/50 hover:border-primary/50 transition-colors">
                     {factor}
                   </Badge>
                 ))}
@@ -138,16 +144,18 @@ export function RiskPredictionCard({ predictions }: RiskPredictionProps) {
             </div>
 
             {/* Recommendations */}
-            <div>
-              <h5 className="text-sm font-medium text-card-foreground mb-2 flex items-center gap-2">
-                <CheckCircleIcon className="h-4 w-4 text-success" />
+            <div className="space-y-3">
+              <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <CheckCircleIcon className="h-3.5 w-3.5 text-emerald-500" />
                 Recommendations
               </h5>
-              <ul className="space-y-1">
+              <ul className="space-y-2">
                 {prediction.recommendations.map((rec, recIdx) => (
-                  <li key={recIdx} className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <span className="text-primary mt-1">•</span>
-                    {rec}
+                  <li key={recIdx} className="flex items-start gap-3 text-sm text-muted-foreground group">
+                    <span className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary shrink-0 mt-0.5 group-hover:bg-primary/20 transition-colors">
+                      {recIdx + 1}
+                    </span>
+                    <span className="group-hover:text-foreground transition-colors">{rec}</span>
                   </li>
                 ))}
               </ul>
@@ -159,8 +167,8 @@ export function RiskPredictionCard({ predictions }: RiskPredictionProps) {
                 note={prediction.shap_explanation.summary}
               />
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       ))}
     </div>
   )

@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { patients, imageAnalyses, riskPredictions, users } from "@/lib/schema"
-import { eq, count, gte, and, desc, sql } from "drizzle-orm"
+import { patients, scans, diagnoses, riskPredictions, users } from "@/lib/schema"
+import { eq, count, gte, and, desc, sql, or } from "drizzle-orm"
 import { getSession } from "@/lib/auth"
 import type { UserSettings } from "@/lib/db"
 
@@ -31,7 +31,7 @@ export async function getDashboardStats(): Promise<{
 
     // Base query filters based on role
     const isDoctor = user.role === "doctor"
-    const userFilter = isDoctor ? undefined : eq(imageAnalyses.userId, user.id)
+    const scanUserFilter = isDoctor ? undefined : eq(scans.uploadedBy, user.id)
     const patientUserFilter = isDoctor ? undefined : eq(patients.userId, user.id)
 
     const today = new Date()
@@ -42,15 +42,20 @@ export async function getDashboardStats(): Promise<{
       totalAnalysesRes,
       totalPatientsRes,
       highRiskRes,
-      todayAnalysesRes
+      todayScansRes
     ] = await Promise.all([
-      db.select({ count: count() }).from(imageAnalyses).where(userFilter),
+      db.select({ count: count() }).from(scans).where(scanUserFilter),
       db.select({ count: count() }).from(patients).where(patientUserFilter),
-      db.select({ count: count() }).from(imageAnalyses).where(
-        and(userFilter, eq(imageAnalyses.severity, "high"))
-      ),
-      db.select({ count: count() }).from(imageAnalyses).where(
-        and(userFilter, gte(imageAnalyses.createdAt, today))
+      db.select({ count: count() }).from(diagnoses)
+        .innerJoin(scans, eq(diagnoses.scanId, scans.id))
+        .where(
+          and(
+            scanUserFilter,
+            or(eq(diagnoses.riskLevel, "High"), eq(diagnoses.riskLevel, "Critical"))
+          )
+        ),
+      db.select({ count: count() }).from(scans).where(
+        and(scanUserFilter, gte(scans.createdAt, today))
       )
     ])
 
@@ -59,7 +64,7 @@ export async function getDashboardStats(): Promise<{
       totalPatients: totalPatientsRes[0]?.count || 0,
       highRiskPatients: highRiskRes[0]?.count || 0,
       accuracyRate: 94.2, // Simulated for now
-      analysesToday: todayAnalysesRes[0]?.count || 0,
+      analysesToday: todayScansRes[0]?.count || 0,
       analysesChange: 12.5, // Simulated
       patientsChange: 8.2, // Simulated
     }
@@ -112,16 +117,16 @@ export async function getConditionBreakdown(): Promise<
   try {
     const user = await requireUser()
     const isDoctor = user.role === "doctor"
-    const userFilter = isDoctor ? undefined : eq(imageAnalyses.userId, user.id)
+    const scanUserFilter = isDoctor ? undefined : eq(scans.uploadedBy, user.id)
 
     const results = await db
       .select({
-        condition: imageAnalyses.scanType,
+        condition: scans.scanType,
         count: count()
       })
-      .from(imageAnalyses)
-      .where(userFilter)
-      .groupBy(imageAnalyses.scanType)
+      .from(scans)
+      .where(scanUserFilter)
+      .groupBy(scans.scanType)
 
     const total = results.reduce((sum, r) => sum + r.count, 0)
     const colors = ["#06b6d4", "#3b82f6", "#10b981", "#8b5cf6", "#f59e0b"]

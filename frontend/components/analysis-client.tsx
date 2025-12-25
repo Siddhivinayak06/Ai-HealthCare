@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Upload, Loader2, AlertCircle, CheckCircle2, Scan, Sparkles, Brain, X, ImageIcon, Stethoscope, Activity, FileWarning, Clock } from "lucide-react"
@@ -12,8 +12,9 @@ import { HeatmapViewer } from "@/components/explainability/heatmap-viewer"
 import { ConfidenceBadge } from "@/components/explainability/confidence-badge"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { submitFeedback, getLatestScanForPatient } from "@/app/actions/analyses"
+import { saveImageAnalysis, getLatestScanForPatient, compareImagingTrends, getHistoricalTrendsForPatient, submitFeedback } from "@/app/actions/analyses"
 import { toast } from "sonner"
+import { PatientTrendChart } from "@/components/patient-trend-chart"
 
 interface AnalysisClientProps {
     userRole: string
@@ -36,6 +37,38 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
     const [explain, setExplain] = useState(true)
     const [previousScan, setPreviousScan] = useState<any>(null)
     const [isBatch, setIsBatch] = useState(false)
+    const [historyData, setHistoryData] = useState<any[]>([])
+    const [comparisonNote, setComparisonNote] = useState<string>("")
+    const [analyzingComparison, setAnalyzingComparison] = useState(false)
+    const [selectedPatientId, setSelectedPatientId] = useState<string>("")
+    const [saving, setSaving] = useState(false)
+    const [saveMessage, setSaveMessage] = useState("")
+
+    // Generate comparative note when results are ready
+    useEffect(() => {
+        const generateNote = async () => {
+            if (result && previousScan && !comparisonNote && !analyzingComparison) {
+                setAnalyzingComparison(true)
+                try {
+                    const response = await compareImagingTrends(previousScan, {
+                        scanType: result.scan_type || scanType,
+                        diagnosis: result.prediction,
+                        severity: result.severity,
+                        findings: result.findings
+                    })
+
+                    if (response.success) {
+                        setComparisonNote(response.summary)
+                    }
+                } catch (e) {
+                    console.error("Comparison generation failed", e)
+                } finally {
+                    setAnalyzingComparison(false)
+                }
+            }
+        }
+        generateNote()
+    }, [result, previousScan])
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -63,17 +96,16 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
         }
     }
 
-    const [selectedPatientId, setSelectedPatientId] = useState<string>("")
-    const [saving, setSaving] = useState(false)
-    const [saveMessage, setSaveMessage] = useState("")
-
     const handlePatientChange = async (id: string) => {
         setSelectedPatientId(id)
         if (id) {
             const lastScan = await getLatestScanForPatient(id)
             setPreviousScan(lastScan)
+            const trends = await getHistoricalTrendsForPatient(id)
+            setHistoryData(trends)
         } else {
             setPreviousScan(null)
+            setHistoryData([])
         }
     }
 
@@ -85,25 +117,25 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
         try {
             const apiData = {
                 patientId: selectedPatientId,
-                scanType: result.scan_type || scanType.toUpperCase(),
+                scanType: (result.scan_type || scanType).toUpperCase(),
                 diagnosis: result.prediction,
-                confidence: result.confidence,
+                confidence: result.confidence * 100,
                 severity: result.severity || "Medium",
                 findings: {
                     result: result.prediction,
                     details: result.findings || []
                 },
-                recommendations: result.recommendations || ["Consult Radiologist"],
-                processingTime: 0.3,
-                modelVersion: "DenseNet121"
+                recommendations: (result.recommendations || ["Consult Radiologist"]).join(", "),
+                processingTime: result.processing_time || 0.3,
+                modelVersion: result.model_info?.architecture || "DenseNet121"
             }
 
-            const { saveImageAnalysis } = await import("@/app/actions/analysis")
             const response = await saveImageAnalysis(apiData)
-            if (response.error) throw new Error(response.error)
+            if (!response.success) throw new Error(response.error)
             setSaveMessage("Saved to patient record!")
-        } catch (error) {
-            setSaveMessage("Failed to save.")
+            handlePatientChange(selectedPatientId) // Refresh history
+        } catch (error: any) {
+            setSaveMessage(error.message || "Failed to save.")
         } finally {
             setSaving(false)
         }
@@ -111,16 +143,16 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
 
     const handleAnalyze = async () => {
         if (!file) return
-
         setLoading(true)
         setError(null)
+        setResult(null)
+        setComparisonNote("")
 
         const formData = new FormData()
         formData.append("file", file)
         formData.append("scan_type", scanType)
         formData.append("explain", explain.toString())
         formData.append("is_batch", isBatch.toString())
-
         if (selectedPatientId) {
             formData.append("patientId", selectedPatientId)
         }
@@ -131,22 +163,13 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                 body: formData,
             })
 
-            if (!res.ok) {
-                throw new Error("Failed to analyze image")
-            }
+            if (!res.ok) throw new Error("Failed to analyze image")
 
             const responseJson = await res.json()
-            let resultData = responseJson
+            setResult(responseJson.success ? responseJson.data : responseJson)
 
-            if (responseJson.success && responseJson.data) {
-                resultData = responseJson.data
-            }
-
-            setResult(resultData)
-
-            // Auto-switch tab if corrected
-            if (resultData.auto_corrected && resultData.scan_type) {
-                const correctedType = resultData.scan_type.toLowerCase()
+            if (responseJson.auto_corrected && responseJson.scan_type) {
+                const correctedType = responseJson.scan_type.toLowerCase()
                 if (correctedType.includes("x-ray")) setScanType("xray")
                 else if (correctedType.includes("ct")) setScanType("ct")
                 else if (correctedType.includes("mri")) setScanType("mri")
@@ -158,27 +181,9 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
         }
     }
 
-    const isPatient = userRole === 'patient' || userRole === 'user'
-
-    const getSeverityColor = (severity: string) => {
-        switch (severity?.toLowerCase()) {
-            case "critical": return "bg-red-500/20 border-red-500/30 text-red-400"
-            case "high": return "bg-rose-500/20 border-rose-500/30 text-rose-400"
-            case "medium": return "bg-amber-500/20 border-amber-500/30 text-amber-400"
-            case "low": return "bg-blue-500/20 border-blue-500/30 text-blue-400"
-            default: return "bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
-        }
-    }
-
-    const [feedbackSent, setFeedbackSent] = useState(false)
-    const [retraining, setRetraining] = useState(false)
-    const [showRetrainConfirm, setShowRetrainConfirm] = useState(false)
-
     const handleFeedback = async (correctLabel: string) => {
         if (!result?.id) return
-
         try {
-            // 1. Notify ML Service for retraining
             const res = await fetch("/api/predict/feedback", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -190,7 +195,6 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                 })
             })
 
-            // 2. Log to Audit Table
             await submitFeedback({
                 entityId: result.id,
                 entityType: "IMAGE_ANALYSIS",
@@ -202,21 +206,16 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
 
             if (res.ok) {
                 setFeedbackSent(true)
-                toast.success("Feedback recorded and shared with model")
+                toast.success("Feedback recorded")
             }
         } catch (e) {
-            console.error("Feedback failed", e)
             toast.error("Failed to record feedback")
         }
     }
 
-    // Helper to map display name to simplified backend scan type
-    const getBackendScanType = () => {
-        if (scanType === 'xray') return 'xray'
-        if (scanType === 'ct') return 'ct'
-        if (scanType === 'mri') return 'mri'
-        return 'xray'
-    }
+    const [feedbackSent, setFeedbackSent] = useState(false)
+    const [retraining, setRetraining] = useState(false)
+    const [showRetrainConfirm, setShowRetrainConfirm] = useState(false)
 
     const handleRetrain = async () => {
         setRetraining(true)
@@ -224,539 +223,428 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
             const res = await fetch("/api/predict/retrain", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    scan_type: getBackendScanType(),
-                    epochs: 5
-                })
+                body: JSON.stringify({ scan_type: scanType, epochs: 5 })
             })
-            if (res.ok) {
-                alert(`Training started for ${getBackendScanType().toUpperCase()}! The model will update automatically when finished.`)
-            } else {
-                alert("Failed to start training.")
-            }
+            if (res.ok) toast.success("Training started!")
+            else toast.error("Failed to start training")
         } catch (e) {
-            alert("Error triggering training.")
+            toast.error("Error triggering training")
         } finally {
             setRetraining(false)
+            setShowRetrainConfirm(false)
         }
     }
 
-    // Determine possible labels based on scan type for correction buttons
-    const getPossibleLabels = () => {
-        // Use result scan type if available (handles auto-correction), else current state
-        const effectiveType = result?.scan_type
-            ? (result.scan_type.toLowerCase().includes('x-ray') ? 'xray' : result.scan_type.toLowerCase().includes('ct') ? 'ct' : 'mri')
-            : scanType
-
-        if (effectiveType === 'xray') return ["Normal", "Pneumonia"]
-        if (effectiveType === 'ct') return ["Normal", "Tumor"]
-        if (effectiveType === 'mri') return ["Normal", "Brain_Tumor"]
-        return ["Normal", "Abnormal"]
+    const getSeverityColor = (severity: string) => {
+        switch (severity?.toLowerCase()) {
+            case "critical": return "bg-red-500/20 border-red-500/30 text-red-400"
+            case "high": return "bg-rose-500/20 border-rose-500/30 text-rose-400"
+            case "medium": return "bg-amber-500/20 border-amber-500/30 text-amber-400"
+            default: return "bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
+        }
     }
 
+    const getPossibleLabels = () => {
+        if (scanType === 'xray') return ["Normal", "Pneumonia"]
+        if (scanType === 'ct') return ["Normal", "Tumor"]
+        return ["Normal", "Brain_Tumor"]
+    }
+
+    const isPatient = userRole === 'patient' || userRole === 'user'
+
     return (
-        <div className="space-y-6">
-            {/* Scan Type Selector */}
-            <div className="bento-card p-4">
-                <div className="flex justify-between items-center mb-3">
-                    <p className="text-sm font-medium text-muted-foreground">Select Scan Type</p>
-                    {/* Retrain Button for Doctors/Admins */}
-                    {userRole !== 'patient' && (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setShowRetrainConfirm(true)}
-                            disabled={retraining}
-                            className="text-xs h-7 gap-1 bg-secondary/50 hover:bg-primary/10 border-primary/20"
-                        >
-                            <Brain className={cn("h-3 w-3", retraining && "animate-pulse")} />
-                            {retraining ? "Training..." : "Retrain Model"}
-                        </Button>
-                    )}
-                </div>
-
-                {/* Retrain Confirmation Dialog (Simple Inline for now) */}
-                {showRetrainConfirm && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                        <div className="bg-background border border-border p-6 rounded-xl shadow-xl max-w-sm w-full space-y-4">
-                            <h3 className="text-lg font-semibold">Start Retraining?</h3>
-                            <p className="text-sm text-muted-foreground">
-                                This will start a background training session for <b>{getBackendScanType().toUpperCase()}</b> using the latest feedback data. This may take a few minutes.
-                            </p>
-                            <div className="flex justify-end gap-2">
-                                <Button variant="ghost" onClick={() => setShowRetrainConfirm(false)}>Cancel</Button>
-                                <Button onClick={handleRetrain}>Confirm Start</Button>
-                            </div>
+        <div className="space-y-8 max-w-6xl mx-auto">
+            {/* Scan Type Selection */}
+            <div className="glass-panel p-6 rounded-3xl relative overflow-hidden group">
+                <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-cyan-500/5 opacity-50" />
+                <div className="relative z-10 space-y-4">
+                    <div className="flex justify-between items-center">
+                        <div className="space-y-1">
+                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                <Scan className="h-4 w-4 text-violet-400" />
+                                Modality Selection
+                            </h3>
+                            <p className="text-xs text-slate-500">Choose imaging type for neural processing</p>
                         </div>
+                        {!isPatient && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowRetrainConfirm(true)}
+                                disabled={retraining}
+                                className="glass-panel h-8 border-violet-500/30 text-violet-300 hover:bg-violet-500/20 gap-2 hover-glow"
+                            >
+                                <Brain className={cn("h-3.5 w-3.5", retraining && "animate-pulse")} />
+                                {retraining ? "Training..." : "Retrain Model"}
+                            </Button>
+                        )}
                     </div>
-                )}
-
-                <div className="grid grid-cols-3 gap-3">
-                    {SCAN_TYPES.map((type) => (
-                        <button
-                            key={type.id}
-                            onClick={() => setScanType(type.id)}
-                            className={cn(
-                                "p-4 rounded-xl border-2 transition-all duration-200 text-left",
-                                scanType === type.id
-                                    ? "border-primary bg-primary/10 shadow-lg shadow-primary/10"
-                                    : "border-border/50 bg-secondary/30 hover:bg-secondary/50 hover:border-primary/30"
-                            )}
-                        >
-                            <div className="text-2xl mb-2">{type.icon}</div>
-                            <p className="font-semibold">{type.name}</p>
-                            <p className="text-xs text-muted-foreground">{type.description}</p>
-                        </button>
-                    ))}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {SCAN_TYPES.map((type) => (
+                            <button
+                                key={type.id}
+                                onClick={() => setScanType(type.id)}
+                                className={cn(
+                                    "relative p-5 rounded-2xl border-2 transition-all duration-500 text-left group overflow-hidden",
+                                    scanType === type.id
+                                        ? "border-violet-500/50 bg-violet-500/10 shadow-[0_0_25px_-5px_oklch(from_var(--primary)_l_c_h_/_0.3)]"
+                                        : "border-white/5 bg-white/5 hover:border-white/20 hover:bg-white/10"
+                                )}
+                            >
+                                <div className={cn(
+                                    "text-3xl mb-3 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-6",
+                                    scanType === type.id && "scale-110"
+                                )}>
+                                    {type.icon}
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="font-bold text-white tracking-tight">{type.name}</p>
+                                    <p className="text-[10px] text-slate-400 leading-tight">{type.description}</p>
+                                </div>
+                                {scanType === type.id && (
+                                    <div className="absolute top-3 right-3">
+                                        <div className="h-2 w-2 rounded-full bg-violet-400 animate-pulse" />
+                                    </div>
+                                )}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
 
-            {isPatient && (
-                <Alert className="bg-amber-500/10 border-amber-500/20">
-                    <AlertCircle className="h-4 w-4 text-amber-500" />
-                    <AlertDescription className="text-amber-700 dark:text-amber-300">
-                        This is for informational purposes only. Please consult a doctor for official diagnosis.
-                    </AlertDescription>
-                </Alert>
+            {/* Retrain Confirmation Modal */}
+            {showRetrainConfirm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
+                    <div className="glass-panel-heavy p-8 rounded-3xl max-w-md w-full space-y-6 border-violet-500/30">
+                        <div className="h-16 w-16 rounded-2xl bg-violet-500/20 flex items-center justify-center mx-auto mb-4">
+                            <Brain className="h-8 w-8 text-violet-400" />
+                        </div>
+                        <div className="text-center space-y-2">
+                            <h3 className="text-xl font-bold text-white">Initiate Neural Retraining?</h3>
+                            <p className="text-sm text-slate-400 leading-relaxed">
+                                This will fine-tune the {scanType.toUpperCase()} architecture using validated clinical feedback.
+                                <span className="block mt-1 text-violet-400/80 font-medium">Estimated duration: 3-5 minutes.</span>
+                            </p>
+                        </div>
+                        <div className="flex gap-3">
+                            <Button variant="ghost" className="flex-1 rounded-xl" onClick={() => setShowRetrainConfirm(false)}>Abort</Button>
+                            <Button className="flex-1 bg-violet-600 hover:bg-violet-500 rounded-xl" onClick={handleRetrain}>Confirm retrain</Button>
+                        </div>
+                    </div>
+                </div>
             )}
 
-            <div className="grid gap-6 lg:grid-cols-2">
-                {/* Upload Card */}
-                <div className="bento-card overflow-hidden">
-                    <CardHeader className="border-b border-border/50 bg-muted/20">
-                        <CardTitle className="text-xl font-bold flex items-center gap-2">
-                            <Upload className="h-5 w-5 text-primary" />
-                            Upload {SCAN_TYPES.find(t => t.id === scanType)?.name}
-                        </CardTitle>
-                        <CardDescription>
-                            Drag and drop or click to upload your medical image
-                        </CardDescription>
-                    </CardHeader>
-
-                    <CardContent className="p-6 space-y-4">
-                        {(!preview && !isBatch) ? (
+            <div className="grid gap-8 lg:grid-cols-12">
+                {/* Upload & Controls */}
+                <div className="lg:col-span-5 space-y-6">
+                    <div className="glass-panel rounded-3xl overflow-hidden flex flex-col h-full border-white/5">
+                        <div className="p-6 border-b border-white/5 bg-white/[0.02]">
+                            <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2 italic">
+                                <Upload className="h-4 w-4 text-cyan-400" />
+                                Acquisition
+                            </h3>
+                        </div>
+                        <div className="p-8 flex-1 flex flex-col space-y-6">
                             <div
                                 className={cn(
-                                    "relative border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center gap-4 text-center cursor-pointer min-h-[280px] transition-all duration-300",
-                                    isDragging
-                                        ? "border-primary bg-primary/10 scale-[1.02]"
-                                        : "border-border hover:border-primary/50 hover:bg-secondary/30"
+                                    "relative flex-1 min-h-[300px] border-2 border-dashed rounded-3xl transition-all duration-500 flex flex-col items-center justify-center gap-6 cursor-pointer group",
+                                    isDragging ? "border-violet-500 bg-violet-500/10" : "border-white/10 hover:border-violet-400/30 hover:bg-white/[0.03]",
+                                    loading && "animate-scan"
                                 )}
                                 onClick={() => document.getElementById('file-upload')?.click()}
                                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
                                 onDragLeave={() => setIsDragging(false)}
                                 onDrop={handleDrop}
                             >
-                                <div className="relative">
-                                    <div className="absolute inset-0 bg-gradient-to-r from-primary to-primary/50 rounded-full blur-xl opacity-30 animate-pulse" />
-                                    <div className="relative p-5 rounded-full bg-primary/10 border border-primary/20">
-                                        <Upload className={cn(
-                                            "h-8 w-8 transition-colors",
-                                            isDragging ? "text-primary" : "text-muted-foreground"
-                                        )} />
+                                {preview ? (
+                                    <div className="relative w-full h-full p-4 p-center flex items-center justify-center">
+                                        <img src={preview} alt="Input" className="max-h-[250px] rounded-2xl shadow-2xl transition-transform duration-700 group-hover:scale-[1.02]" />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/40 to-transparent rounded-2xl" />
                                     </div>
-                                </div>
-                                <div className="space-y-1">
-                                    <p className="font-semibold">
-                                        {isDragging ? "Drop your image here" : "Click or drag image to upload"}
-                                    </p>
-                                    <p className="text-sm text-muted-foreground">Supports JPG, PNG, DICOM • Max 10MB</p>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="relative group rounded-2xl overflow-hidden border border-border/50 min-h-[280px] bg-secondary/20 flex items-center justify-center">
-                                {isBatch ? (
-                                    <div className="text-center space-y-4 p-8">
-                                        <div className="h-20 w-20 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto border border-primary/20">
-                                            <FileWarning className="h-10 w-10 text-primary" />
+                                ) : isBatch ? (
+                                    <div className="p-8 bg-violet-500/10 rounded-2xl border border-violet-500/20 flex flex-col items-center gap-4 animate-in zoom-in duration-300">
+                                        <div className="h-16 w-16 rounded-full bg-violet-500/20 flex items-center justify-center">
+                                            <FileWarning className="h-8 w-8 text-violet-400" />
                                         </div>
-                                        <div className="space-y-1">
-                                            <p className="font-bold">{file?.name}</p>
-                                            <p className="text-sm text-muted-foreground">Ready for batch neural analysis</p>
+                                        <div className="text-center">
+                                            <p className="text-sm font-bold text-white">{file?.name}</p>
+                                            <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Batch Archive Locked</p>
                                         </div>
                                     </div>
                                 ) : (
-                                    <img
-                                        src={preview || ""}
-                                        alt="Preview"
-                                        className="max-h-[280px] w-full object-contain transition-transform duration-300 group-hover:scale-[1.02]"
-                                    />
-                                )}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                                <Button
-                                    variant="destructive"
-                                    size="icon"
-                                    className="absolute top-3 right-3 h-9 w-9 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300"
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        setFile(null)
-                                        setPreview(null)
-                                        setResult(null)
-                                        setFeedbackSent(false)
-                                        setIsBatch(false)
-                                    }}
-                                >
-                                    <X className="h-4 w-4" />
-                                </Button>
-                                <div className="absolute bottom-3 left-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                    <div className="flex items-center gap-2 text-xs text-white bg-black/40 backdrop-blur-sm rounded-lg px-3 py-2">
-                                        <ImageIcon className="h-3.5 w-3.5" />
-                                        <span className="truncate">{file?.name}</span>
+                                    <div className="text-center space-y-4">
+                                        <div className="h-20 w-20 rounded-3xl bg-white/5 flex items-center justify-center mx-auto group-hover:scale-110 group-hover:bg-violet-500/10 transition-all duration-500">
+                                            <ImageIcon className="h-10 w-10 text-slate-500 group-hover:text-violet-400 transition-colors" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="text-sm font-bold text-slate-300">Drop clinical imaging</p>
+                                            <p className="text-xs text-slate-500">Supports DICOM, JPEG, PNG, ZIP</p>
+                                        </div>
                                     </div>
+                                )}
+                            </div>
+
+                            <input type="file" id="file-upload" className="hidden" onChange={handleFileChange} accept="image/*,.zip" />
+
+                            <div className="space-y-4">
+                                <div className="glass-panel p-4 rounded-2xl flex items-center justify-between border-white/5">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 rounded-lg bg-cyan-500/10">
+                                            <Sparkles className="h-4 w-4 text-cyan-400" />
+                                        </div>
+                                        <div>
+                                            <Label className="text-sm font-bold text-slate-200">Explainable AI (XAI)</Label>
+                                            <p className="text-[10px] text-slate-500">Enable feature saliency maps</p>
+                                        </div>
+                                    </div>
+                                    <Switch checked={explain} onCheckedChange={setExplain} className="data-[state=checked]:bg-cyan-500" />
                                 </div>
+
+                                <Button
+                                    className="w-full h-14 text-white font-bold rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 shadow-xl shadow-violet-500/20 hover-glow group transition-all duration-300"
+                                    disabled={!file || loading}
+                                    onClick={handleAnalyze}
+                                >
+                                    {loading ? (
+                                        <Loader2 className="mr-3 h-5 w-5 animate-spin" />
+                                    ) : (
+                                        <Scan className="mr-3 h-5 w-5 group-hover:scale-110 transition-transform" />
+                                    )}
+                                    {loading ? "PROCESSING NEURAL LAYERS..." : "EXECUTE AI ANALYSIS"}
+                                </Button>
                             </div>
-                        )}
-
-                        <input
-                            type="file"
-                            accept="image/*,.zip"
-                            className="hidden"
-                            id="file-upload"
-                            onChange={handleFileChange}
-                        />
-
-                        {error && (
-                            <Alert variant="destructive">
-                                <AlertCircle className="h-4 w-4" />
-                                <AlertTitle>Error</AlertTitle>
-                                <AlertDescription>{error}</AlertDescription>
-                            </Alert>
-                        )}
-
-                        <div className="flex items-center justify-between p-3 rounded-lg bg-accent/30 border border-primary/20">
-                            <div className="space-y-0.5">
-                                <Label className="text-sm font-medium">Explainable AI (XAI)</Label>
-                                <p className="text-[10px] text-muted-foreground italic">Generate visual heatmaps & uncertainty metrics</p>
-                            </div>
-                            <Switch checked={explain} onCheckedChange={setExplain} />
                         </div>
-
-                        <Button
-                            className={cn(
-                                "w-full h-12 text-base font-semibold transition-all duration-300",
-                                file && !loading
-                                    ? "bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:scale-[1.02]"
-                                    : "bg-secondary text-muted-foreground cursor-not-allowed"
-                            )}
-                            disabled={!file || loading}
-                            onClick={handleAnalyze}
-                        >
-                            {loading ? (
-                                <>
-                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                    Analyzing {SCAN_TYPES.find(t => t.id === scanType)?.name}...
-                                </>
-                            ) : (
-                                <>
-                                    <Scan className="mr-2 h-5 w-5" />
-                                    Analyze {SCAN_TYPES.find(t => t.id === scanType)?.name}
-                                </>
-                            )}
-                        </Button>
-                    </CardContent>
+                    </div>
                 </div>
 
-                {/* Results Card */}
-                <div className={cn(
-                    "bento-card overflow-hidden transition-all duration-500",
-                    result && (result.severity === "Normal" || result.severity === "Low"
-                        ? "ring-2 ring-emerald-500/30"
-                        : result.severity === "Critical" || result.severity === "High"
-                            ? "ring-2 ring-rose-500/30"
-                            : "ring-2 ring-amber-500/30"
-                    )
-                )}>
-                    <CardHeader className="border-b border-border/50 bg-muted/20">
-                        <CardTitle className="text-xl font-bold flex items-center gap-2">
-                            <Sparkles className="h-5 w-5 text-primary" />
-                            Analysis Results
-                        </CardTitle>
-                        <CardDescription>
-                            AI detection, findings, and recommendations
-                        </CardDescription>
-                    </CardHeader>
+                {/* AI Insights & Results */}
+                <div className="lg:col-span-7 space-y-6">
+                    <div className="glass-panel rounded-3xl h-full border-white/5 flex flex-col">
+                        <div className="p-6 border-b border-white/5 bg-white/[0.02] flex justify-between items-center">
+                            <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2 italic">
+                                <Activity className="h-4 w-4 text-violet-400" />
+                                Diagnostics
+                            </h3>
+                            {result && (
+                                <Badge className={cn("px-3 py-1 rounded-full text-[10px] font-bold tracking-tighter uppercase border-none",
+                                    result.severity === "Critical" ? "bg-rose-500 text-white" :
+                                        result.severity === "High" ? "bg-amber-500 text-black" : "bg-emerald-500 text-white")}>
+                                    {result.severity} Priority
+                                </Badge>
+                            )}
+                        </div>
 
-                    <CardContent className="p-6 min-h-[400px]">
-                        {result ? (
-                            <div className="w-full space-y-5 animate-in fade-in zoom-in-95 duration-500">
-                                {/* Auto-Correction Notice */}
-                                {result.auto_corrected && (
-                                    <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-start gap-3 animate-pulse">
-                                        <Brain className="h-5 w-5 text-indigo-500 mt-0.5" />
-                                        <div>
-                                            <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">Smart Calibration Active</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                Our AI detected you uploaded a <b>{result.scan_type}</b> and automatically switched the analysis mode for better accuracy.
-                                            </p>
+                        <div className="p-8 flex-1">
+                            {result ? (
+                                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                                    {/* Primary Result Card */}
+                                    <div className={cn(
+                                        "p-6 rounded-[32px] border flex flex-col md:flex-row items-center gap-6 relative overflow-hidden group hover:scale-[1.01] transition-transform duration-500",
+                                        result.severity === "Normal" ? "gradient-normal" :
+                                            result.severity === "Medium" ? "gradient-warning" : "gradient-critical"
+                                    )}>
+                                        <div className={cn(
+                                            "h-20 w-20 rounded-full flex items-center justify-center shrink-0 shadow-2xl",
+                                            result.severity === "Normal" ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
+                                        )}>
+                                            {result.severity === "Normal" ? <CheckCircle2 className="h-10 w-10" /> : <AlertCircle className="h-10 w-10" />}
                                         </div>
-                                    </div>
-                                )}
-
-                                {/* Scan Type & Severity */}
-                                <div className="flex items-center gap-2 flex-wrap">
-                                    <Badge variant="outline" className="bg-primary/10 border-primary/30">
-                                        {result.scan_type || SCAN_TYPES.find(t => t.id === scanType)?.name}
-                                    </Badge>
-                                    <Badge className={cn("border", getSeverityColor(result.severity))}>
-                                        {result.severity || "Unknown"} Severity
-                                    </Badge>
-                                    {result.confidence_metrics && (
-                                        <ConfidenceBadge
-                                            confidence={result.confidence_metrics.confidence}
-                                            uncertainty={result.confidence_metrics.uncertainty_level}
-                                            reviewRequired={result.confidence_metrics.review_required}
-                                        />
-                                    )}
-                                </div>
-
-                                {/* Prediction Result */}
-                                <div className={cn(
-                                    "p-4 rounded-xl border flex items-center gap-4",
-                                    result.severity === "Normal" || result.severity === "Low"
-                                        ? "bg-emerald-500/10 border-emerald-500/20"
-                                        : result.severity === "Critical" || result.severity === "High"
-                                            ? "bg-rose-500/10 border-rose-500/20"
-                                            : "bg-amber-500/10 border-amber-500/20"
-                                )}>
-                                    {result.severity === "Normal" || result.severity === "Low" ? (
-                                        <div className="p-3 rounded-full bg-emerald-500/20">
-                                            <CheckCircle2 className="h-7 w-7 text-emerald-500" />
-                                        </div>
-                                    ) : result.severity === "Critical" || result.severity === "High" ? (
-                                        <div className="p-3 rounded-full bg-rose-500/20">
-                                            <FileWarning className="h-7 w-7 text-rose-500" />
-                                        </div>
-                                    ) : (
-                                        <div className="p-3 rounded-full bg-amber-500/20">
-                                            <AlertCircle className="h-7 w-7 text-amber-500" />
-                                        </div>
-                                    )}
-                                    <div>
-                                        <h3 className="font-bold text-lg">{result.prediction}</h3>
-                                        <p className="text-sm text-muted-foreground">AI Diagnosis</p>
-                                    </div>
-                                    {result.triage && (
-                                        <div className="ml-auto text-right">
-                                            <Badge className={cn(
-                                                "text-[10px] uppercase font-bold",
-                                                result.triage.priority === 'high' ? 'bg-rose-500' :
-                                                    result.triage.priority === 'medium' ? 'bg-amber-500' : 'bg-blue-500'
-                                            )}>
-                                                {result.triage.priority} Priority
-                                            </Badge>
-                                            <p className="text-[9px] text-muted-foreground mt-0.5">{result.triage.triageNote}</p>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Confidence */}
-                                <div className="space-y-2">
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-muted-foreground">Confidence Score</span>
-                                        <span className="font-bold tabular-nums">
-                                            {(result.confidence * 100).toFixed(1)}%
-                                        </span>
-                                    </div>
-                                    <div className="h-2 rounded-full bg-secondary overflow-hidden">
-                                        <div
-                                            className="h-full bg-primary"
-                                            style={{ width: `${result.confidence * 100}%` }}
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* XAI Heatmap Integration */}
-                                {result.explanation_url && preview && (
-                                    <HeatmapViewer
-                                        originalImage={preview}
-                                        heatmapUrl={`http://localhost:8000${result.explanation_url}`}
-                                        summary={result.explanation_text}
-                                    />
-                                )}
-
-                                {/* Findings */}
-                                {result.findings && result.findings.length > 0 && (
-                                    <div className="space-y-2">
-                                        <p className="text-sm font-medium flex items-center gap-2">
-                                            <Stethoscope className="h-4 w-4 text-primary" />
-                                            Key Findings
-                                        </p>
-                                        <ul className="space-y-1.5">
-                                            {result.findings.map((finding: string, idx: number) => (
-                                                <li key={idx} className="text-sm p-2 rounded-lg bg-secondary/50 border border-border/50 flex items-start gap-2">
-                                                    <span className="text-primary mt-0.5">•</span>
-                                                    {finding}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
-
-                                {/* Recommendations */}
-                                {result.recommendations && result.recommendations.length > 0 && (
-                                    <div className="space-y-2">
-                                        <p className="text-sm font-medium flex items-center gap-2">
-                                            <Activity className="h-4 w-4 text-primary" />
-                                            Recommendations
-                                        </p>
-                                        <ul className="space-y-1.5">
-                                            {result.recommendations.map((rec: string, idx: number) => (
-                                                <li key={idx} className="text-sm p-2 rounded-lg bg-primary/5 border border-primary/20 flex items-start gap-2">
-                                                    {rec.includes("🚨") || rec.includes("IMMEDIATE") ? (
-                                                        <span className="text-rose-500 mt-0.5">⚠️</span>
-                                                    ) : rec.includes("⚠️") ? (
-                                                        <span className="text-amber-500 mt-0.5">⚠️</span>
-                                                    ) : (
-                                                        <span className="text-emerald-500 mt-0.5">✓</span>
-                                                    )}
-                                                    {rec.replace(/🚨|⚠️|✅/g, '').trim()}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
-
-                                {/* Feedback Section (Continuous Learning) */}
-                                {result.id && !feedbackSent && (
-                                    <div className="p-4 rounded-xl relative overflow-hidden group">
-                                        <div className="absolute inset-0 bg-gradient-to-tr from-blue-500/10 via-purple-500/5 to-emerald-500/10 opacity-50" />
-                                        <div className="relative z-10 space-y-3">
-                                            <div className="flex items-center justify-between">
-                                                <div className="space-y-1">
-                                                    <p className="text-sm font-semibold text-primary">Help Improve AI Accuracy</p>
-                                                    <p className="text-xs text-muted-foreground">Is this diagnosis correct?</p>
+                                        <div className="text-center md:text-left space-y-1">
+                                            <h3 className="text-2xl md:text-3xl font-black text-white tracking-tight">{result.prediction}</h3>
+                                            <div className="flex items-center justify-center md:justify-start gap-4">
+                                                <div className="flex items-center gap-1.5 grayscale opacity-70 group-hover:grayscale-0 group-hover:opacity-100 transition-all">
+                                                    <Brain className="h-3 w-3 text-violet-400" />
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{result.model_info?.architecture || "Inference Engine V3"}</span>
                                                 </div>
-                                                <Sparkles className="h-4 w-4 text-primary/40" />
+                                                <span className="h-4 w-[1px] bg-white/10" />
+                                                <div className="flex items-center gap-1.5">
+                                                    <Clock className="h-3 w-3 text-slate-500" />
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{(result.processing_time || 0.8).toFixed(2)}s Latency</span>
+                                                </div>
                                             </div>
+                                        </div>
+                                    </div>
 
-                                            <div className="flex flex-wrap gap-2">
-                                                <Button
-                                                    size="sm"
-                                                    variant="secondary"
-                                                    className="h-8 text-xs bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all duration-300 hover:scale-105"
-                                                    onClick={() => handleFeedback(result.prediction)}
-                                                >
-                                                    <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-                                                    Yes, Correct
-                                                </Button>
+                                    {/* Confidence Metrics */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="glass-panel p-5 rounded-2xl space-y-4 border-white/5">
+                                            <div className="flex justify-between items-end">
+                                                <div className="space-y-1">
+                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Statistical Certainty</p>
+                                                    <p className="text-2xl font-black text-white">{(result.confidence * 100).toFixed(1)}%</p>
+                                                </div>
+                                                {result.confidence_metrics && (
+                                                    <ConfidenceBadge
+                                                        confidence={result.confidence_metrics.confidence}
+                                                        uncertainty={result.confidence_metrics.uncertainty_level}
+                                                        reviewRequired={result.confidence_metrics.review_required}
+                                                    />
+                                                )}
+                                            </div>
+                                            <div className="h-2 rounded-full bg-white/5 overflow-hidden">
+                                                <div
+                                                    className="h-full bg-gradient-to-r from-violet-500 to-cyan-400 rounded-full transition-all duration-1000 shadow-[0_0_10px_oklch(from_var(--primary)_l_c_h_/_0.5)]"
+                                                    style={{ width: `${result.confidence * 100}%` }}
+                                                />
+                                            </div>
+                                        </div>
 
-                                                {getPossibleLabels().filter(l => l !== result.prediction).map(label => (
+                                        <div className="glass-panel p-5 rounded-2xl flex flex-col justify-center gap-3 border-white/5">
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Explainable Heatmap</p>
+                                            <div className="flex items-center gap-3">
+                                                {result.explanation_url ? (
+                                                    <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-bold animate-pulse">
+                                                        FEATURE SALIENCY GENERATED
+                                                    </div>
+                                                ) : (
+                                                    <div className="p-2 rounded-lg bg-white/5 text-slate-500 text-xs font-medium">
+                                                        Visual explanation disabled
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* XAI Viewer */}
+                                    {result.explanation_url && preview && (
+                                        <div className="animate-in fade-in zoom-in-95 duration-700 delay-300">
+                                            <HeatmapViewer
+                                                originalImage={preview}
+                                                heatmapUrl={`http://localhost:8000${result.explanation_url}`}
+                                            />
+                                        </div>
+                                    )}
+
+                                    {/* Medical Report Findings */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {result.findings?.length > 0 && (
+                                            <div className="space-y-4">
+                                                <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                                    <Stethoscope className="h-4 w-4 text-violet-400" />
+                                                    Clinical Findings
+                                                </h4>
+                                                <div className="space-y-2">
+                                                    {result.findings.map((f: string, i: number) => (
+                                                        <div key={i} className="group p-3 rounded-xl bg-white/5 border border-white/5 hover:border-violet-500/30 transition-colors">
+                                                            <p className="text-xs text-slate-300 leading-relaxed group-hover:text-white transition-colors">{f}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-6">
+                                            {/* Historical Comparison */}
+                                            {previousScan && (
+                                                <div className="glass-panel p-5 rounded-3xl border-violet-500/20 bg-violet-500/5 relative overflow-hidden animate-in slide-in-from-right-4 duration-700 delay-500">
+                                                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                                                        <Clock className="h-12 w-12 text-violet-300" />
+                                                    </div>
+                                                    <h4 className="text-[11px] font-black text-violet-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                                        Longitudinal Contrast
+                                                    </h4>
+                                                    <div className="flex gap-4 items-start">
+                                                        <div className="w-14 h-14 rounded-xl border border-white/10 overflow-hidden shrink-0 group hover:scale-110 transition-transform duration-500">
+                                                            <img src={previousScan.imageUrl} className="w-full h-full object-cover grayscale opacity-60 group-hover:opacity-100 group-hover:grayscale-0 transition-all" />
+                                                        </div>
+                                                        <div className="space-y-1 mt-1">
+                                                            <p className="text-[10px] font-black text-white uppercase">{previousScan.diagnosis}</p>
+                                                            <p className="text-[9px] text-slate-500 italic">Scan date: {new Date(previousScan.createdAt).toLocaleDateString()}</p>
+                                                        </div>
+                                                    </div>
+                                                    {comparisonNote && (
+                                                        <div className="mt-4 p-3 rounded-xl bg-white/5 border border-white/5 border-l-violet-500 border-l-2">
+                                                            <p className="text-[10px] text-violet-200 leading-relaxed italic line-clamp-2">“{comparisonNote}”</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Trend Visualization */}
+                                            {historyData.length > 0 && (
+                                                <div className="space-y-4 animate-in fade-in duration-700 delay-700">
+                                                    <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                                        Patient Trajectory
+                                                    </h4>
+                                                    <div className="h-[120px]">
+                                                        <PatientTrendChart data={historyData} />
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Action Footers */}
+                                    <div className="pt-6 border-t border-white/5 flex flex-col md:flex-row gap-4">
+                                        {!feedbackSent && (
+                                            <div className="flex-1 space-y-3">
+                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Human-in-the-Loop Validation</p>
+                                                <div className="flex flex-wrap gap-2">
                                                     <Button
-                                                        key={label}
                                                         size="sm"
                                                         variant="outline"
-                                                        className="h-8 text-xs transition-all duration-300 hover:bg-secondary/80"
-                                                        onClick={() => handleFeedback(label)}
+                                                        className="h-9 px-4 rounded-xl border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                                                        onClick={() => handleFeedback(result.prediction)}
                                                     >
-                                                        No, it's {label}
+                                                        Confirm Detection
                                                     </Button>
-                                                ))}
+                                                    {getPossibleLabels().filter(l => l !== result.prediction).map(l => (
+                                                        <Button
+                                                            key={l}
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="h-9 px-4 rounded-xl border-white/10 text-slate-400 hover:text-white transition-colors"
+                                                            onClick={() => handleFeedback(l)}
+                                                        >
+                                                            Mark as {l}
+                                                        </Button>
+                                                    ))}
+                                                </div>
                                             </div>
-                                        </div>
-                                    </div>
-                                )}
+                                        )}
 
-                                {feedbackSent && (
-                                    <div className="p-3 rounded-lg bg-emerald-500/10 text-emerald-600 text-sm font-medium text-center border border-emerald-500/20 flex items-center justify-center gap-2 animate-in fade-in zoom-in-90">
-                                        <CheckCircle2 className="h-4 w-4" />
-                                        Thank you! The model will learn from this.
-                                    </div>
-                                )}
-
-                                {/* Model Info */}
-                                <div className="p-3 rounded-xl bg-secondary/30 border border-border/50 space-y-2">
-                                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Model Info</p>
-                                    <div className="grid grid-cols-2 gap-2 text-xs">
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Architecture</span>
-                                            <span className="font-medium">{result.model_info?.architecture || "DenseNet121"}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Type</span>
-                                            <span className="font-medium">{result.model_info?.type || "Medical"}</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {!isPatient && (
-                                    <div className="pt-4 space-y-3 border-t border-border/50">
-                                        <div className="space-y-1">
-                                            <p className="text-sm font-medium">Save to Patient Record</p>
-                                            <div className="flex gap-2">
-                                                <div className="flex-1">
+                                        {!isPatient && (
+                                            <div className="w-full md:w-auto flex flex-col justify-end gap-3">
+                                                <div className="w-full md:w-[240px]">
                                                     <PatientSelector onSelect={handlePatientChange} />
                                                 </div>
                                                 <Button
                                                     onClick={handleSave}
                                                     disabled={!selectedPatientId || saving}
-                                                    className="min-w-[100px]"
+                                                    className="w-full h-10 rounded-xl bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-500/20 font-bold text-xs"
                                                 >
-                                                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                                                    {saving ? (
+                                                        <>
+                                                            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                                                            Archiving...
+                                                        </>
+                                                    ) : (
+                                                        "Commit to Patient Record"
+                                                    )}
                                                 </Button>
+                                                {saveMessage && <p className="text-[10px] text-center text-emerald-400 font-bold animate-in fade-in">{saveMessage}</p>}
                                             </div>
-                                        </div>
-                                        {saveMessage && (
-                                            <p className={cn("text-xs", saveMessage.includes("Saved") ? "text-emerald-500" : "text-rose-500")}>
-                                                {saveMessage}
-                                            </p>
                                         )}
                                     </div>
-                                )}
-
-                                {/* Historical Comparison View */}
-                                {previousScan && (
-                                    <div className="p-4 rounded-xl bg-violet-500/5 border border-violet-500/10 space-y-4">
-                                        <h4 className="text-sm font-bold flex items-center gap-2 text-violet-400">
-                                            <Clock className="h-4 w-4" />
-                                            Historical Comparison
-                                        </h4>
-                                        <div className="flex gap-4 items-start">
-                                            <div className="w-24 h-24 rounded-lg overflow-hidden border border-border shrink-0 bg-background/50">
-                                                <img
-                                                    src={previousScan.imageUrl}
-                                                    alt="Previous scan"
-                                                    className="w-full h-full object-cover grayscale"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <p className="text-xs font-semibold">{previousScan.diagnosis}</p>
-                                                <p className="text-[10px] text-muted-foreground">
-                                                    Analyzed on {new Date(previousScan.createdAt).toLocaleDateString()}
-                                                </p>
-                                                <Badge variant="outline" className={cn("text-[9px] py-0 h-4", getSeverityColor(previousScan.severity))}>
-                                                    {previousScan.severity}
-                                                </Badge>
-                                                <p className="text-[10px] text-muted-foreground pt-1 italic max-w-[200px]">
-                                                    {previousScan.diagnosis === result?.prediction
-                                                        ? "Condition appears consistent with previous findings."
-                                                        : "Note: AI prediction has changed since last visit."}
-                                                </p>
-                                            </div>
-                                        </div>
+                                </div>
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-center space-y-6 opacity-30 min-h-[400px]">
+                                    <div className="relative">
+                                        <Scan className="h-20 w-20 text-slate-400" />
+                                        <div className="absolute inset-0 bg-violet-500/20 blur-2xl rounded-full" />
                                     </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="text-center text-muted-foreground space-y-4">
-                                <div className="relative mx-auto w-fit">
-                                    <div className="absolute inset-0 bg-gradient-to-r from-primary to-primary/50 rounded-full blur-xl opacity-30 animate-pulse" />
-                                    <div className="relative p-6 rounded-full bg-secondary/50 border border-border/50">
-                                        <Scan className="h-12 w-12 text-muted-foreground/50" />
+                                    <div className="space-y-2">
+                                        <h4 className="text-xl font-black text-slate-200 uppercase tracking-tight">System Idle</h4>
+                                        <p className="text-xs text-slate-500 max-w-[240px] leading-relaxed mx-auto italic">
+                                            Telemetry stream ready. Upload a medical scan to initiate neural diagnostic analysis.
+                                        </p>
                                     </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <p className="font-medium">Awaiting Image</p>
-                                    <p className="text-sm max-w-[280px] mx-auto">Upload a medical image and click "Analyze" to get AI predictions</p>
-                                    <div className="flex items-center justify-center gap-2 text-xs text-primary/80 pt-2">
-                                        <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                                        <span>Continuous Learning Enabled</span>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </CardContent>
+                            )}
+                        </div>
+                    </div>
                 </div>
-            </div >
-        </div >
+            </div>
+        </div>
     )
 }

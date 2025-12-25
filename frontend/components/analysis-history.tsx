@@ -2,12 +2,10 @@
 
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { BentoCard } from "./bento-card"
-import type { AnalysisResult } from "./analysis-results"
-import { ClockIcon } from "./icons"
+import { Clock, History, Activity, ChevronRight } from "lucide-react"
 
 interface AnalysisHistoryProps {
-  analyses?: AnalysisResult[]
+  analyses?: any[]
 }
 
 function formatDate(date: Date | string): string {
@@ -32,85 +30,87 @@ export function AnalysisHistory({ analyses = [] }: AnalysisHistoryProps) {
     analyses.length > 0
       ? analyses
       : [
-          {
-            id: "1",
-            scanType: "Chest X-Ray",
-            diagnosis: "No abnormalities detected",
-            severity: "normal" as const,
-            confidence: 94,
-            patientName: "John D.",
-            createdAt: new Date(),
-          },
-          {
-            id: "2",
-            scanType: "Brain MRI",
-            diagnosis: "Minor calcification noted",
-            severity: "low" as const,
-            confidence: 89,
-            patientName: "Sarah M.",
-            createdAt: new Date(Date.now() - 86400000),
-          },
-          {
-            id: "3",
-            scanType: "CT Scan",
-            diagnosis: "Normal findings",
-            severity: "normal" as const,
-            confidence: 92,
-            patientName: "Mike R.",
-            createdAt: new Date(Date.now() - 172800000),
-          },
-        ]
+        {
+          id: "1",
+          scanType: "Chest X-Ray",
+          diagnosis: "No abnormalities detected",
+          severity: "Normal",
+          confidence: 94,
+          patientName: "John Doe",
+          createdAt: new Date(),
+        },
+        {
+          id: "2",
+          scanType: "Brain MRI",
+          diagnosis: "Minor calcification noted",
+          severity: "Low",
+          confidence: 89,
+          patientName: "Sarah Miller",
+          createdAt: new Date(Date.now() - 86400000),
+        },
+      ]
 
   return (
-    <BentoCard className="h-full">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h3 className="text-lg font-semibold text-card-foreground">Analysis History</h3>
-          <p className="text-sm text-muted-foreground mt-1">Recent diagnostic results</p>
+    <div className="glass-panel rounded-3xl overflow-hidden border-white/5 bg-white/[0.02]">
+      <div className="p-6 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
+        <div className="space-y-1">
+          <h3 className="text-sm font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2">
+            <History className="h-4 w-4 text-violet-400" />
+            Registry
+          </h3>
+          <p className="text-[10px] text-slate-500 font-medium">Historical clinical logs</p>
         </div>
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/50">
-          <ClockIcon className="h-4 w-4 text-muted-foreground" />
+        <div className="h-8 w-8 rounded-lg bg-white/5 flex items-center justify-center">
+          <Activity className="h-4 w-4 text-slate-500" />
         </div>
       </div>
 
-      <div className="space-y-3">
+      <div className="p-4 space-y-3">
         {displayData.map((item) => (
           <div
             key={item.id}
-            className="flex items-center justify-between p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-all duration-200 cursor-pointer border border-transparent hover:border-border/50"
+            className="group flex items-center justify-between p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.08] transition-all duration-300 cursor-pointer border border-white/5 hover:border-violet-500/30"
           >
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 space-y-2">
               <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold text-card-foreground">{item.scanType}</p>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+                  {item.scanType?.toUpperCase()}
+                </span>
                 <Badge
-                  variant="secondary"
                   className={cn(
-                    "text-xs font-medium",
-                    item.severity === "normal" && "bg-success/10 text-success border-success/20",
-                    item.severity === "low" && "bg-primary/10 text-primary border-primary/20",
-                    item.severity === "moderate" && "bg-warning/10 text-warning border-warning/20",
-                    item.severity === "high" && "bg-destructive/10 text-destructive border-destructive/20",
+                    "text-[8px] px-1.5 py-0 rounded-full border-none font-bold uppercase tracking-widest",
+                    item.severity?.toLowerCase() === "normal" && "bg-emerald-500/20 text-emerald-400",
+                    item.severity?.toLowerCase() === "low" && "bg-cyan-500/20 text-cyan-400",
+                    item.severity?.toLowerCase() === "medium" && "bg-amber-500/20 text-amber-400",
+                    item.severity?.toLowerCase() === "high" && "bg-rose-500/20 text-rose-400",
+                    item.severity?.toLowerCase() === "critical" && "bg-rose-600 text-white",
                   )}
                 >
                   {item.severity}
                 </Badge>
               </div>
-              <p className="text-xs text-muted-foreground mt-1 truncate">{item.diagnosis}</p>
+              <p className="text-xs font-bold text-white truncate leading-none">
+                {item.diagnosis}
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-500 font-medium">{item.patientName || "Anonymous"}</span>
+                <span className="h-1 w-1 rounded-full bg-slate-700" />
+                <span className="text-[10px] text-slate-600 font-medium">{formatDate(item.createdAt)}</span>
+              </div>
             </div>
-            <div className="text-right ml-3">
-              {item.patientName && <p className="text-xs font-medium text-card-foreground">{item.patientName}</p>}
-              <p className="text-xs text-muted-foreground">{item.createdAt ? formatDate(item.createdAt) : "Recent"}</p>
+            <div className="ml-4 translate-x-1 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 transition-all">
+              <ChevronRight className="h-4 w-4 text-violet-400" />
             </div>
           </div>
         ))}
 
         {analyses.length === 0 && displayData.length === 0 && (
-          <div className="text-center py-8">
-            <p className="text-sm text-muted-foreground">No analyses yet</p>
-            <p className="text-xs text-muted-foreground mt-1">Upload an image to get started</p>
+          <div className="text-center py-10 opacity-20 flex flex-col items-center gap-3">
+            <History className="h-10 w-10 text-slate-400" />
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No Logs Found</p>
           </div>
         )}
       </div>
-    </BentoCard>
+    </div>
   )
 }
