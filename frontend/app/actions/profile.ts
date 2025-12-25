@@ -1,5 +1,8 @@
 "use server"
 
+import { db } from "@/lib/db"
+import { users } from "@/lib/schema"
+import { eq } from "drizzle-orm"
 import { getSession } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
@@ -12,19 +15,33 @@ async function getSessionToken() {
 }
 
 export async function getUserProfile() {
-    const token = await getSessionToken()
-    if (!token) return null
-
     try {
-        const res = await fetch(`${API_URL}/auth/me`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-            cache: "no-store",
-        })
+        const { user: sessionUser } = await getSession()
+        if (!sessionUser) return null
 
-        if (!res.ok) throw new Error("Failed to fetch profile")
-        return await res.json()
+        const result = await db
+            .select({
+                id: users.id,
+                email: users.email,
+                name: users.name,
+                role: users.role,
+                createdAt: users.createdAt,
+                updatedAt: users.updatedAt,
+            })
+            .from(users)
+            .where(eq(users.id, sessionUser.id));
+
+        if (result.length === 0) return null
+
+        // Return structured data
+        return {
+            id: result[0].id,
+            email: result[0].email,
+            name: result[0].name,
+            role: result[0].role,
+            created_at: result[0].createdAt?.toISOString(),
+            updated_at: result[0].updatedAt?.toISOString(),
+        }
     } catch (error) {
         console.error("Get profile error:", error)
         return null

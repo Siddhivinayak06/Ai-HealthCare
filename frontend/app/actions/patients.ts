@@ -223,7 +223,22 @@ export async function addHealthRecord(
 
 export async function getPatientHealthRecords(patientId: string): Promise<HealthRecord[]> {
   try {
-    await requireUser()
+    const user = await requireUser()
+
+    // RBAC: Verify patients can only access their own records
+    if (user.role === "patient") {
+      const patientRecord = await db
+        .select()
+        .from(patients)
+        .where(and(eq(patients.id, patientId), eq(patients.userId, user.id)))
+        .limit(1)
+
+      if (patientRecord.length === 0) {
+        console.log(`RBAC: Patient ${user.id} denied access to health records for patient ${patientId}`)
+        return []
+      }
+    }
+
     const result = await db
       .select()
       .from(healthRecords)
@@ -240,19 +255,27 @@ export async function getPatientHealthRecords(patientId: string): Promise<Health
 export async function searchPatients(query: string): Promise<Patient[]> {
   try {
     const user = await requireUser()
-    const result = await db
+
+    let baseQuery = db
       .select()
       .from(patients)
-      .where(
-        and(
-          eq(patients.userId, user.id),
-          or(
-            ilike(patients.firstName, `%${query}%`),
-            ilike(patients.lastName, `%${query}%`),
-            ilike(patients.email, `%${query}%`)
-          )
-        )
-      )
+      .$dynamic()
+
+    // Build search condition
+    const searchCondition = or(
+      ilike(patients.firstName, `%${query}%`),
+      ilike(patients.lastName, `%${query}%`),
+      ilike(patients.email, `%${query}%`)
+    )
+
+    // RBAC: Patients only see themselves, doctors see all
+    if (user.role === "patient") {
+      baseQuery = baseQuery.where(and(eq(patients.userId, user.id), searchCondition))
+    } else {
+      baseQuery = baseQuery.where(searchCondition)
+    }
+
+    const result = await baseQuery
       .orderBy(desc(patients.createdAt))
       .limit(20)
 

@@ -433,20 +433,26 @@ export default function RiskPage() {
                                             AI Recommendations
                                         </h4>
                                         <ul className="space-y-2">
-                                            {Array.isArray(result.recommendation) && result.recommendation.map((rec: string, i: number) => (
-                                                <li
-                                                    key={i}
-                                                    className="flex items-start gap-3 text-sm p-3 rounded-lg bg-secondary/50 border border-border/50 animate-in slide-in-from-left duration-300"
-                                                    style={{ animationDelay: `${i * 100}ms` }}
-                                                >
-                                                    {rec.includes("IMMEDIATE") ? (
-                                                        <AlertTriangle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
-                                                    ) : (
-                                                        <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                                                    )}
-                                                    {rec}
-                                                </li>
-                                            ))}
+                                            {Array.isArray(result.recommendation) && result.recommendation.map((rec: any, i: number) => {
+                                                // Safely handle non-string items (legacy or malformed data)
+                                                const text = typeof rec === 'string' ? rec : String(rec || "");
+                                                if (!text) return null;
+
+                                                return (
+                                                    <li
+                                                        key={i}
+                                                        className="flex items-start gap-3 text-sm p-3 rounded-lg bg-secondary/50 border border-border/50 animate-in slide-in-from-left duration-300"
+                                                        style={{ animationDelay: `${i * 100}ms` }}
+                                                    >
+                                                        {text.includes("IMMEDIATE") ? (
+                                                            <AlertTriangle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                                                        ) : (
+                                                            <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                                                        )}
+                                                        {text}
+                                                    </li>
+                                                )
+                                            })}
                                         </ul>
                                     </div>
                                 </div>

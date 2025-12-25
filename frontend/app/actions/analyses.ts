@@ -1,13 +1,13 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { imageAnalyses, riskPredictions, patients, auditLogs, scans, diagnoses } from "@/lib/schema"
+import { riskPredictions, patients, auditLogs, scans, diagnoses } from "@/lib/schema"
 import { eq, desc, and, ne, lt } from "drizzle-orm"
 import { getSession } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { logActivity } from "./activity"
 import { generateText } from "ai"
-import type { ImageAnalysis, RiskPrediction, Scan, Diagnosis } from "@/lib/db"
+import type { RiskPrediction, Scan, Diagnosis } from "@/lib/db"
 
 /**
  * Require a valid session and return the user.
@@ -68,22 +68,8 @@ export async function saveImageAnalysis(data: {
 
     const newDiagnosis = diagnosisResult[0]
 
-    // 3. Fallback: Also insert into legacy imageAnalyses for compatibility
-    await db
-      .insert(imageAnalyses)
-      .values({
-        userId: user.id,
-        patientId: data.patientId,
-        scanType: data.scanType,
-        imageUrl: data.imageUrl,
-        diagnosis: data.diagnosis,
-        confidence: (data.confidence / 100).toString(),
-        severity: data.severity,
-        findings: data.findings,
-        recommendations: data.recommendations.join(". "),
-        processingTime: data.processingTime.toString(),
-        modelVersion: data.modelVersion,
-      })
+
+
 
     await logActivity("Image analysis completed", "analysis", {
       scanType: data.scanType,
@@ -92,6 +78,7 @@ export async function saveImageAnalysis(data: {
     })
 
     revalidatePath("/imaging")
+    revalidatePath("/analysis")
     revalidatePath("/")
     return { success: true, analysis: newScan }
   } catch (error) {
@@ -104,50 +91,63 @@ export async function getRecentAnalyses(limit = 10): Promise<any[]> {
   try {
     const user = await requireUser()
 
-    // Join with patients to get names
+    // Query scans + diagnoses + patients
     let query = db
       .select({
-        id: imageAnalyses.id,
-        scan_type: imageAnalyses.scanType,
-        image_url: imageAnalyses.imageUrl,
-        diagnosis: imageAnalyses.diagnosis,
-        confidence: imageAnalyses.confidence,
-        severity: imageAnalyses.severity,
-        findings: imageAnalyses.findings,
-        recommendations: imageAnalyses.recommendations,
-        processing_time: imageAnalyses.processingTime,
-        model_version: imageAnalyses.modelVersion,
-        created_at: imageAnalyses.createdAt,
+        id: scans.id, // Using scan ID as the main ID
+        scan_type: scans.scanType,
+        image_url: scans.imageUrl,
+        created_at: scans.createdAt,
+        diagnosis: diagnoses.predictedCondition,
+        confidence: diagnoses.confidenceScore,
+        severity: diagnoses.riskLevel,
+        explanation: diagnoses.explanation,
+        model_version: diagnoses.modelVersion,
         first_name: patients.firstName,
         last_name: patients.lastName,
+        patient_id: scans.patientId,
       })
-      .from(imageAnalyses)
-      .leftJoin(patients, eq(imageAnalyses.patientId, patients.id))
+      .from(scans)
+      .leftJoin(diagnoses, eq(scans.id, diagnoses.scanId))
+      .leftJoin(patients, eq(scans.patientId, patients.id))
       .$dynamic()
 
     // RBAC: Patients only see their own analyses
     if (user.role === "patient") {
-      query = query.where(eq(imageAnalyses.userId, user.id))
+      // Scans doesn't have userId directly, but we can verify via patients table or initial uploader
+      // The schema says `scans.uploadedBy`. If patient uploaded it, they can see it.
+      // Or if the scan belongs to a patient profile that is owned by this user.
+
+      // Option 1: Filter by uploadedBy (Simpler if users always upload their own)
+      // Option 2: Filter by patients.userId (Better if doctors upload FOR patients)
+
+      // Let's use patients.userId to be safe, assuming the join on patients works
+      query = query.where(eq(patients.userId, user.id))
     }
 
     const results = await query
-      .orderBy(desc(imageAnalyses.createdAt))
+      .orderBy(desc(scans.createdAt))
       .limit(limit)
 
-    return results.map(r => ({
-      id: r.id,
-      scanType: r.scan_type,
-      imageUrl: r.image_url,
-      diagnosis: r.diagnosis || "",
-      confidence: r.confidence ? parseFloat(r.confidence) * 100 : 0,
-      severity: r.severity || "normal",
-      findings: r.findings,
-      recommendations: r.recommendations ? r.recommendations.split(". ") : [],
-      processingTime: r.processing_time ? parseFloat(r.processing_time) : 0,
-      modelVersion: r.model_version || "V1.0",
-      createdAt: r.created_at,
-      patientName: r.first_name ? `${r.first_name} ${r.last_name || ""}`.trim() : undefined,
-    }))
+    return results.map(r => {
+      // Parse explanation JSON safely
+      const explanation = r.explanation as any || {};
+
+      return {
+        id: r.id,
+        scanType: r.scan_type,
+        imageUrl: r.image_url,
+        diagnosis: r.diagnosis || "Pending",
+        confidence: r.confidence ? Math.round(parseFloat(r.confidence) * 1000) / 10 : 0,
+        severity: r.severity || "Normal",
+        findings: explanation.findings?.details || explanation.findings || [], // Standardize specific findings path
+        recommendations: explanation.recommendations || [],
+        processingTime: 0.5, // Not in new schema, default to placeholder
+        modelVersion: r.model_version || "V2.0",
+        createdAt: r.created_at,
+        patientName: r.first_name ? `${r.first_name} ${r.last_name || ""}`.trim() : "Unknown Patient",
+      }
+    })
   } catch (error) {
     console.error("Error getting recent analyses:", error)
     return []

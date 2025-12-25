@@ -127,22 +127,7 @@ export const diagnoses = pgTable('diagnoses', {
     createdAt: timestamp('created_at').defaultNow(),
 });
 
-// Image Analyses Table (Legacy, keeping for compatibility during migration if needed)
-export const imageAnalyses = pgTable('image_analyses', {
-    id: uuid('id').defaultRandom().primaryKey(),
-    userId: uuid('user_id').references(() => users.id).notNull(),
-    patientId: uuid('patient_id').references(() => patients.id),
-    scanType: text('scan_type').notNull(),
-    imageUrl: text('image_url'),
-    diagnosis: text('diagnosis'),
-    confidence: decimal('confidence', { precision: 4, scale: 3 }),
-    severity: varchar('severity', { length: 20 }),
-    findings: jsonb('findings'),
-    recommendations: text('recommendations'),
-    processingTime: decimal('processing_time', { precision: 10, scale: 3 }),
-    modelVersion: text('model_version'),
-    createdAt: timestamp('created_at').defaultNow(),
-});
+
 
 // Risk Predictions Table (Legacy)
 export const riskPredictions = pgTable('risk_predictions', {
