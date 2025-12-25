@@ -13,7 +13,8 @@ import {
     UsersIcon,
     BrainIcon,
     FileTextIcon,
-    ActivityIcon
+    ActivityIcon,
+    CalendarIcon
 } from "@/components/icons"
 import { UserMenu } from "@/components/user-menu"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -26,6 +27,7 @@ const navigation = [
     { name: "Risk", href: "/risk", icon: BrainIcon },
     { name: "Reports", href: "/reports", icon: FileTextIcon },
     { name: "Activity", href: "/activity", icon: ActivityIcon },
+    { name: "Appointments", href: "/appointments", icon: CalendarIcon },
 ]
 
 export function Navbar({ user }: { user: any }) {

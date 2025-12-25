@@ -1,6 +1,7 @@
+import "server-only";
 import { SignJWT, jwtVerify } from "jose";
-import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { SessionUser } from "@/types/session";
 
 // ==================== SECURITY: Fail-fast if no secret ====================
 if (!process.env.JWT_SECRET) {
@@ -11,16 +12,8 @@ const key = new TextEncoder().encode(process.env.JWT_SECRET);
 // Session configuration
 const SESSION_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours
 
-// Session user type
-export interface SessionUser {
-  id: string;
-  email: string;
-  name?: string | null;
-  role: string;
-}
-
-// Backward compatibility alias
-export type User = SessionUser;
+// Re-export types for convenience (though client components should use @/types/session)
+export type { SessionUser, User } from "@/types/session";
 
 interface SessionPayload extends SessionUser {
   expires: string;
@@ -56,6 +49,7 @@ export async function login(user: SessionUser) {
   const expires = new Date(Date.now() + SESSION_DURATION_MS);
   const session = await encrypt({ ...user, expires: expires.toISOString() });
 
+  const { cookies } = await import("next/headers");
   const cookieStore = await cookies();
   cookieStore.set("auth_token", session, {
     expires,
@@ -70,6 +64,7 @@ export async function login(user: SessionUser) {
  * Destroy the session by clearing the auth cookie
  */
 export async function logout() {
+  const { cookies } = await import("next/headers");
   const cookieStore = await cookies();
   cookieStore.set("auth_token", "", { expires: new Date(0), path: "/" });
 }
@@ -80,6 +75,7 @@ export async function logout() {
  * SELF-HEALING: If name is missing, it fetches from DB and updates session.
  */
 export async function getSession(): Promise<{ user: SessionUser | null }> {
+  const { cookies } = await import("next/headers");
   const cookieStore = await cookies();
   const session = cookieStore.get("auth_token")?.value;
   if (!session) return { user: null };

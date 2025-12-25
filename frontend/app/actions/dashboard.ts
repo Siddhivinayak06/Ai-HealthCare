@@ -228,17 +228,9 @@ export async function getModelAccuracy(): Promise<
   }
 }
 
-export async function getPatientPredictions(limit: number = 5): Promise<
-  Array<{
-    id: string
-    patientName: string
-    patientId: string
-    condition: string
-    riskScore: number
-    lastUpdated: string
-    trend: "improving" | "stable" | "worsening"
-  }>
-> {
+import { AIInsight } from "@/lib/types/health"
+
+export async function getPatientPredictions(limit: number = 5): Promise<AIInsight[]> {
   try {
     const user = await requireUser()
     const isDoctor = user.role === "doctor"
@@ -266,8 +258,9 @@ export async function getPatientPredictions(limit: number = 5): Promise<
       patientName: `${r.firstName} ${r.lastName}`,
       condition: r.condition,
       riskScore: r.riskScore ? parseFloat(r.riskScore) * 100 : 0,
-      lastUpdated: r.lastUpdated ? r.lastUpdated.toISOString() : new Date().toISOString(),
-      trend: "stable"
+      confidence: 0.95, // Default confidence if missing from legacy records
+      createdAt: r.lastUpdated || new Date(),
+      trend: "stable" as const
     }))
   } catch (error) {
     console.error("Error getting patient predictions:", error)

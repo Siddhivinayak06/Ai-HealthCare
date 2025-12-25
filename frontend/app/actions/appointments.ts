@@ -1,124 +1,126 @@
-"use server"
+"use server";
 
-import { db } from "@/lib/db"
-import { appointments, users } from "@/lib/schema"
-import { eq, and, gte, lte, desc } from "drizzle-orm"
-import { getSession } from "@/lib/auth"
-import { revalidatePath } from "next/cache"
-import { logActivity } from "./activity"
+import { db } from "@/lib/db";
+import { appointments, patients, users } from "@/lib/schema";
+import { eq, and, desc, or, sql } from "drizzle-orm";
+import { getSession } from "@/lib/auth";
+import { revalidatePath } from "next/cache";
 
-async function requireUser() {
-    const { user } = await getSession()
-    if (!user) {
-        throw new Error("Unauthorized")
-    }
-    return user
-}
+export async function getAppointments() {
+    const { user } = await getSession();
+    if (!user) throw new Error("Unauthorized");
 
-export async function getDoctorsList() {
     try {
-        await requireUser()
-        const result = await db
-            .select({
-                id: users.id,
-                name: users.name,
-                email: users.email
-            })
-            .from(users)
-            .where(eq(users.role, "doctor"))
+        if (user.role === "doctor") {
+            return await db
+                .select({
+                    id: appointments.id,
+                    title: appointments.title,
+                    startTime: appointments.startTime,
+                    endTime: appointments.endTime,
+                    status: appointments.status,
+                    type: appointments.type,
+                    notes: appointments.notes,
+                    patientName: sql<string>`${patients.firstName} || ' ' || ${patients.lastName}`,
+                })
+                .from(appointments)
+                .leftJoin(patients, eq(appointments.patientId, patients.id))
+                .where(eq(appointments.userId, user.id))
+                .orderBy(desc(appointments.startTime));
+        } else {
+            // Patient view - find their patient record first
+            const patientRecord = await db.query.patients.findFirst({
+                where: eq(patients.userId, user.id)
+            });
 
-        return result
+            if (!patientRecord) return [];
+
+            return await db
+                .select({
+                    id: appointments.id,
+                    title: appointments.title,
+                    startTime: appointments.startTime,
+                    endTime: appointments.endTime,
+                    status: appointments.status,
+                    type: appointments.type,
+                    notes: appointments.notes,
+                    doctorName: users.name,
+                })
+                .from(appointments)
+                .leftJoin(users, eq(appointments.userId, users.id))
+                .where(eq(appointments.patientId, patientRecord.id))
+                .orderBy(desc(appointments.startTime));
+        }
     } catch (error) {
-        console.error("Get doctors error:", error)
-        return []
-    }
-}
-
-export async function getAppointments(startDate?: string, endDate?: string) {
-    try {
-        const user = await requireUser()
-
-        let query = db.select().from(appointments).$dynamic()
-
-        const filters = []
-        if (user.role === "patient") {
-            filters.push(eq(appointments.userId, user.id))
-        }
-
-        if (startDate) {
-            filters.push(gte(appointments.startTime, new Date(startDate)))
-        }
-
-        if (endDate) {
-            filters.push(lte(appointments.endTime, new Date(endDate)))
-        }
-
-        if (filters.length > 0) {
-            query = query.where(and(...filters))
-        }
-
-        const result = await query.orderBy(desc(appointments.startTime))
-        return result
-    } catch (error) {
-        console.error("Get appointments error:", error)
-        return []
+        console.error("Error fetching appointments:", error);
+        return [];
     }
 }
 
 export async function createAppointment(data: {
-    patientId: string
-    title: string
-    startTime: string
-    endTime: string
-    notes?: string
-    type?: string
+    patientId: string;
+    userId: string; // Doctor ID
+    title: string;
+    startTime: string;
+    endTime: string;
+    type?: string;
+    notes?: string;
 }) {
-    try {
-        const user = await requireUser()
+    const { user } = await getSession();
+    if (!user) throw new Error("Unauthorized");
 
+    try {
         const result = await db.insert(appointments).values({
-            userId: user.id,
+            userId: data.userId,
             patientId: data.patientId,
             title: data.title,
             startTime: new Date(data.startTime),
             endTime: new Date(data.endTime),
-            notes: data.notes,
             type: data.type || "checkup",
+            notes: data.notes,
             status: "scheduled"
-        }).returning()
+        }).returning();
 
-        await logActivity("Appointment scheduled", "appointment", {
-            appointmentId: result[0].id,
-            title: data.title
-        })
-
-        revalidatePath("/appointments")
-        return { success: true, appointment: result[0] }
+        revalidatePath("/appointments");
+        return { success: true, data: result[0] };
     } catch (error) {
-        console.error("Create appointment error:", error)
-        return { error: "Failed to create appointment" }
+        console.error("Error creating appointment:", error);
+        return { success: false, error: "Failed to create appointment" };
     }
 }
 
-export async function updateAppointment(id: string, data: any) {
-    try {
-        await requireUser()
+export async function updateAppointmentStatus(id: string, status: string) {
+    const { user } = await getSession();
+    if (!user) throw new Error("Unauthorized");
 
-        const result = await db
-            .update(appointments)
+    try {
+        await db.update(appointments)
             .set({
-                ...data,
-                startTime: data.startTime ? new Date(data.startTime) : undefined,
-                endTime: data.endTime ? new Date(data.endTime) : undefined,
+                status: status as any,
                 updatedAt: new Date()
             })
-            .where(eq(appointments.id, id))
-            .returning()
+            .where(eq(appointments.id, id));
 
-        revalidatePath("/appointments")
-        return { success: true, appointment: result[0] }
+        revalidatePath("/appointments");
+        return { success: true };
     } catch (error) {
-        console.error("Update appointment error:", error)
-        return { error: "Failed to update appointment" }
+        console.error("Error updating appointment:", error);
+        return { success: false, error: "Failed to update status" };
     }
 }
+
+export async function getDoctorsList() {
+    try {
+        return await db.select({
+            id: users.id,
+            name: users.name,
+            email: users.email
+        })
+            .from(users)
+            .where(eq(users.role, "doctor"));
+    } catch (error) {
+        console.error("Error fetching doctors:", error);
+        return [];
+    }
+}
+

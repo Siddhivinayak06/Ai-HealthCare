@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { UserIcon, ShieldIcon, SettingsIcon, LoaderIcon, CheckCircleIcon } from "@/components/icons"
 import { updateProfile, updateUserSettings, changePassword } from "@/app/actions/settings"
-import type { User } from "@/lib/auth"
+import { User } from "@/types/session"
 import type { UserSettings } from "@/lib/db"
 
 interface SettingsFormProps {
@@ -39,12 +39,12 @@ export function SettingsForm({ user, settings }: SettingsFormProps) {
   })
 
   const [preferencesData, setPreferencesData] = useState({
-    notificationsEnabled: settings?.notifications_enabled ?? true,
-    emailAlerts: settings?.email_alerts ?? true,
-    darkMode: settings?.dark_mode ?? true,
+    notificationsEnabled: settings?.notificationsEnabled ?? true,
+    emailAlerts: settings?.emailAlerts ?? true,
+    darkMode: settings?.darkMode ?? true,
     language: settings?.language || "en",
     timezone: settings?.timezone || "UTC",
-    defaultScanType: settings?.default_scan_type || "none", // Updated default value to "none"
+    defaultScanType: settings?.defaultScanType || "none", // Updated default value to "none"
   })
 
   const handleUpdateProfile = async () => {
