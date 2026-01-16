@@ -1,132 +1,144 @@
 import { getSession } from "@/lib/auth"
 import { AnalysisClient } from "@/components/analysis-client"
-import { getRecentAnalyses } from "@/app/actions/analyses"
-import { Scan, Brain, Sparkles, Activity, Clock, ShieldCheck, TrendingUp } from "lucide-react"
-import { AnalysisHistory } from "@/components/analysis-history"
-import { Card, CardContent } from "@/components/ui/card"
+import { getRecentAnalyses, getAnalysisStats } from "@/app/actions/analyses"
+import { Scan, Brain, Sparkles, Activity, ShieldCheck, TrendingUp, Zap, Cpu, Server, Gauge } from "lucide-react"
+
+import { cn } from "@/lib/utils"
 
 export default async function AnalysisPage() {
     const { user } = await getSession()
-    const recentAnalyses = await getRecentAnalyses(10)
+    const recentAnalyses = await getRecentAnalyses(50)
+    const stats = await getAnalysisStats()
 
-    // Calculate quick stats
-    const totalScans = recentAnalyses.length
-    const criticalCases = recentAnalyses.filter(a => a.severity?.toLowerCase() === 'critical' || a.severity?.toLowerCase() === 'high').length
-    const normalCases = recentAnalyses.filter(a => a.severity?.toLowerCase() === 'normal' || a.severity?.toLowerCase() === 'low').length
+    // Use specific stats or fallback to calculated if 0 (though 0 is valid)
+    // Actually, just use the stats directly.
+    const totalScans = stats.total
+    const criticalCases = stats.critical
+    const normalCases = stats.normal
 
     return (
         <div className="min-h-screen relative overflow-hidden">
-            {/* Enhanced Background effects */}
-            <div className="absolute inset-0 bg-grid-pattern opacity-[0.03] pointer-events-none" />
-            <div className="absolute top-0 left-1/4 w-[700px] h-[700px] bg-gradient-to-br from-cyan-500/10 via-violet-600/8 to-transparent rounded-full blur-[150px] pointer-events-none animate-float" />
-            <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-gradient-to-tr from-violet-600/10 via-fuchsia-600/5 to-transparent rounded-full blur-[150px] pointer-events-none animate-float" style={{ animationDelay: '3s' }} />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/[0.03] rounded-full blur-[200px] pointer-events-none" />
+            {/* Enhanced Background effects - Theme Aware */}
+            <div className="absolute inset-0 bg-grid-pattern opacity-[0.02] dark:opacity-[0.03] pointer-events-none" />
+            <div className="absolute top-0 left-1/4 w-[700px] h-[700px] bg-gradient-to-br from-cyan-500/5 dark:from-cyan-500/10 via-violet-600/4 dark:via-violet-600/8 to-transparent rounded-full blur-[150px] pointer-events-none animate-float" />
+            <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-gradient-to-tr from-violet-600/5 dark:from-violet-600/10 via-fuchsia-600/3 dark:via-fuchsia-600/5 to-transparent rounded-full blur-[150px] pointer-events-none animate-float" style={{ animationDelay: '3s' }} />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/[0.02] dark:bg-primary/[0.03] rounded-full blur-[200px] pointer-events-none" />
 
-            <div className="relative p-4 lg:p-8 pt-16 lg:pt-8 space-y-8 max-w-7xl mx-auto">
-                {/* Header Section */}
-                <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="space-y-2">
-                        <div className="flex items-center gap-4">
-                            <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-cyan-500 via-violet-600 to-fuchsia-600 flex items-center justify-center shadow-2xl shadow-violet-500/30 group hover:shadow-violet-500/50 transition-shadow duration-500">
-                                <Scan className="h-8 w-8 text-white" />
+            <div className="relative p-4 lg:px-6 pt-16 lg:pt-6 space-y-6 w-full">
+                {/* Premium Header Section */}
+                <div className="relative overflow-hidden rounded-3xl p-6 sm:p-8 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between border border-white/20 shadow-2xl bg-white/40 dark:bg-black/20 backdrop-blur-xl transition-all hover:border-white/30">
+                    {/* Glass/Gradient Background */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-white/40 via-white/10 to-transparent dark:from-white/5 dark:via-white/2 dark:to-transparent pointer-events-none" />
+
+                    <div className="relative flex items-center gap-5">
+                        <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-cyan-500 via-violet-600 to-fuchsia-600 p-[1px] shadow-[0_0_20px_rgba(139,92,246,0.3)] group">
+                            <div className="h-full w-full rounded-2xl bg-white dark:bg-black/90 backdrop-blur-md flex items-center justify-center relative overflow-hidden">
+                                <Scan className="h-8 w-8 text-transparent bg-clip-text bg-gradient-to-br from-cyan-500 via-violet-600 to-fuchsia-600 group-hover:scale-110 transition-transform duration-500" />
+                                <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-fuchsia-600/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                             </div>
-                            <div>
-                                <h1 className="text-3xl lg:text-4xl font-bold tracking-tight text-primary">
-                                    AI Diagnostic Hub
-                                </h1>
-                                <p className="text-muted-foreground text-lg">
-                                    Neural analysis & multimodal clinical diagnostics
-                                </p>
-                            </div>
+                        </div>
+                        <div className="space-y-1">
+                            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-slate-900 via-violet-700 to-slate-900 dark:from-white dark:via-violet-300 dark:to-white drop-shadow-sm">
+                                AI Diagnostic Hub
+                            </h1>
+                            <p className="text-[10px] uppercase tracking-[0.3em] font-mono font-bold text-muted-foreground flex items-center gap-2.5">
+                                <span className="relative flex h-2 w-2">
+                                    <span className="animate-medical-ripple absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span>
+                                </span>
+                                Neural Imaging Analysis System
+                            </p>
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-3">
-                        <div className="health-card px-4 py-2.5 rounded-xl flex items-center gap-2.5 border-cyan-500/20 bg-cyan-500/5">
-                            <div className="h-2 w-2 rounded-full bg-cyan-500 animate-pulse" />
-                            <Brain className="h-4 w-4 text-cyan-400" />
-                            <span className="text-sm font-semibold">DenseNet-121</span>
+                    {/* Status Badges - Premium Glass Pills */}
+                    <div className="relative flex flex-wrap gap-3">
+                        <div className="px-4 py-2 rounded-xl flex items-center gap-2.5 bg-cyan-500/5 border border-cyan-500/20 backdrop-blur-md shadow-sm hover:bg-cyan-500/10 transition-colors">
+                            <Brain className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                            <span className="text-xs font-bold tracking-wide text-cyan-700 dark:text-cyan-300">DenseNet-121</span>
                         </div>
-                        <div className="health-card px-4 py-2.5 rounded-xl flex items-center gap-2.5 border-emerald-500/20 bg-emerald-500/5">
-                            <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                            <span className="text-sm font-semibold">HIPAA Secured</span>
+                        <div className="px-4 py-2 rounded-xl flex items-center gap-2.5 bg-emerald-500/5 border border-emerald-500/20 backdrop-blur-md shadow-sm hover:bg-emerald-500/10 transition-colors">
+                            <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                            <span className="text-xs font-bold tracking-wide text-emerald-700 dark:text-emerald-300">HIPAA Compliant</span>
                         </div>
                     </div>
                 </div>
 
-                {/* Performance Stats Row */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {/* Compact Stats Row - Premium Glass Design */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     {[
-                        { label: "Total Analyses", value: totalScans, icon: Activity, color: "text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-500/20" },
-                        { label: "Critical Findings", value: criticalCases, icon: ShieldCheck, color: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/20" },
-                        { label: "Normal Results", value: normalCases, icon: Sparkles, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
-                        { label: "Model Reliability", value: "94.8%", icon: TrendingUp, color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/20" },
+                        {
+                            label: "Total Analyses",
+                            value: totalScans,
+                            icon: Activity,
+                            color: "text-cyan-600 dark:text-cyan-400",
+                            bgGradient: "bg-gradient-to-br from-cyan-500/5 to-transparent dark:from-cyan-500/10",
+                            hover: "hover:shadow-[0_0_20px_rgba(6,182,212,0.15)] hover:border-cyan-500/30",
+                            border: "border-cyan-200/50 dark:border-cyan-500/20",
+                            iconBg: "bg-cyan-100 dark:bg-cyan-500/20"
+                        },
+                        {
+                            label: "Critical Cases",
+                            value: criticalCases,
+                            icon: ShieldCheck,
+                            color: "text-rose-600 dark:text-rose-400",
+                            bgGradient: "bg-gradient-to-br from-rose-500/5 to-transparent dark:from-rose-500/10",
+                            hover: "hover:shadow-[0_0_20px_rgba(225,29,72,0.15)] hover:border-rose-500/30",
+                            border: "border-rose-200/50 dark:border-rose-500/20",
+                            iconBg: "bg-rose-100 dark:bg-rose-500/20"
+                        },
+                        {
+                            label: "Normal Results",
+                            value: normalCases,
+                            icon: Sparkles,
+                            color: "text-emerald-600 dark:text-emerald-400",
+                            bgGradient: "bg-gradient-to-br from-emerald-500/5 to-transparent dark:from-emerald-500/10",
+                            hover: "hover:shadow-[0_0_20px_rgba(16,185,129,0.15)] hover:border-emerald-500/30",
+                            border: "border-emerald-200/50 dark:border-emerald-500/20",
+                            iconBg: "bg-emerald-100 dark:bg-emerald-500/20"
+                        },
+                        {
+                            label: "Model Accuracy",
+                            value: "94.8%",
+                            icon: TrendingUp,
+                            color: "text-violet-600 dark:text-violet-400",
+                            bgGradient: "bg-gradient-to-br from-violet-500/5 to-transparent dark:from-violet-500/10",
+                            hover: "hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] hover:border-violet-500/30",
+                            border: "border-violet-200/50 dark:border-violet-500/20",
+                            iconBg: "bg-violet-100 dark:bg-violet-500/20"
+                        },
                     ].map((stat, i) => (
-                        <div key={i} className={cn("health-card p-5 flex items-center gap-4 hover:shadow-lg transition-all duration-500 group", stat.border)}>
-                            <div className={cn("p-3.5 rounded-xl transition-all duration-500 group-hover:scale-110", stat.bg, stat.color)}>
+                        <div
+                            key={i}
+                            className={cn(
+                                "group relative overflow-hidden p-4 rounded-2xl flex items-center gap-4 transition-all duration-300 border backdrop-blur-sm",
+                                stat.bgGradient,
+                                stat.border,
+                                stat.hover
+                            )}
+                        >
+                            <div className={cn("p-3 rounded-xl transition-transform duration-300 group-hover:scale-110", stat.iconBg, stat.color)}>
                                 <stat.icon className="h-5 w-5" />
                             </div>
-                            <div className="space-y-1">
-                                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">{stat.label}</p>
+                            <div className="space-y-0.5">
+                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold opacity-80">{stat.label}</p>
                                 <p className="text-2xl font-black tracking-tight">{stat.value}</p>
                             </div>
+                            {/* Decorative shiny corner */}
+                            <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-white/10 to-transparent -translate-y-8 translate-x-8 rounded-full blur-xl group-hover:bg-white/20 transition-all" />
                         </div>
                     ))}
                 </div>
 
-                {/* Main Content Area */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                    {/* Primary Analysis Column */}
-                    <div className="lg:col-span-8 space-y-8">
-                        <AnalysisClient userRole={user?.role || "patient"} />
-                    </div>
-
-                    {/* Side Intelligence Column */}
-                    <div className="lg:col-span-4 space-y-6">
-                        <div className="sticky top-8 space-y-6">
-                            <AnalysisHistory analyses={recentAnalyses as any} />
-
-                            {/* System Status Card */}
-                            <div className="health-card overflow-hidden border-violet-500/20">
-                                <div className="p-5 bg-gradient-to-br from-violet-500/5 via-fuchsia-500/5 to-transparent">
-                                    <h4 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2 mb-4 text-muted-foreground">
-                                        <Zap className="h-4 w-4 text-amber-400" />
-                                        Compute Status
-                                    </h4>
-                                    <div className="space-y-4">
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-sm text-muted-foreground">Neural Engine</span>
-                                            <span className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
-                                                <span className="relative flex h-2 w-2">
-                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                                                </span>
-                                                Operational
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-sm text-muted-foreground">Avg Latency</span>
-                                            <span className="text-sm font-semibold">0.8s</span>
-                                        </div>
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-sm text-muted-foreground">GPU Utilization</span>
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-16 h-1.5 bg-muted/50 rounded-full overflow-hidden">
-                                                    <div className="h-full w-[72%] bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full" />
-                                                </div>
-                                                <span className="text-sm font-semibold">72%</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                {/* Main Content Area - Full Width */}
+                <div className="space-y-8">
+                    {/* Primary Analysis - Centered/Full */}
+                    <AnalysisClient
+                        userRole={user?.role || "patient"}
+                        recentAnalyses={recentAnalyses}
+                    />
                 </div>
             </div>
         </div>
     )
 }
-
-import { cn } from "@/lib/utils"
-import { Zap } from "lucide-react"

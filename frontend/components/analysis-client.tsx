@@ -3,16 +3,16 @@
 import { useState, useRef, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Upload, Loader2, AlertCircle, CheckCircle2, Scan, Sparkles, Brain, X, ImageIcon, Stethoscope, Activity, FileWarning, Clock } from "lucide-react"
+import { Upload, Loader2, AlertCircle, CheckCircle2, Scan, Brain, X, ImageIcon, Stethoscope, Activity, FileWarning, Clock, Zap, Server, Gauge, Cpu, ChevronDown, Sparkles, TrendingUp } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { PatientSelector } from "@/components/patient-selector"
-import { HeatmapViewer } from "@/components/explainability/heatmap-viewer"
+
 import { ConfidenceBadge } from "@/components/explainability/confidence-badge"
-import { Switch } from "@/components/ui/switch"
+
 import { Label } from "@/components/ui/label"
-import { saveImageAnalysis, getLatestScanForPatient, compareImagingTrends, getHistoricalTrendsForPatient, submitFeedback } from "@/app/actions/analyses"
+import { saveImageAnalysis, getLatestScanForPatient, getHistoricalTrendsForPatient, submitFeedback } from "@/app/actions/analyses"
 import { toast } from "sonner"
 import { PatientTrendChart } from "@/components/patient-trend-chart"
 import { useRouter } from "next/navigation"
@@ -20,6 +20,7 @@ import { getPatients } from "@/app/actions/patients"
 
 interface AnalysisClientProps {
     userRole: string
+    recentAnalyses?: any[]
 }
 
 const SCAN_TYPES = [
@@ -28,7 +29,9 @@ const SCAN_TYPES = [
     { id: "mri", name: "MRI", icon: "🧲", description: "Magnetic resonance imaging" },
 ]
 
-export function AnalysisClient({ userRole }: AnalysisClientProps) {
+import { AnalysisHistory } from "@/components/analysis-history"
+
+export function AnalysisClient({ userRole, recentAnalyses = [] }: AnalysisClientProps) {
     const [file, setFile] = useState<File | null>(null)
     const [preview, setPreview] = useState<string | null>(null)
     const [loading, setLoading] = useState(false)
@@ -36,15 +39,14 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
     const [error, setError] = useState<string | null>(null)
     const [isDragging, setIsDragging] = useState(false)
     const [scanType, setScanType] = useState("xray")
-    const [explain, setExplain] = useState(true)
     const [previousScan, setPreviousScan] = useState<any>(null)
     const [isBatch, setIsBatch] = useState(false)
     const [historyData, setHistoryData] = useState<any[]>([])
-    const [comparisonNote, setComparisonNote] = useState<string>("")
-    const [analyzingComparison, setAnalyzingComparison] = useState(false)
+
     const [selectedPatientId, setSelectedPatientId] = useState<string>("")
     const [saving, setSaving] = useState(false)
     const [saveMessage, setSaveMessage] = useState("")
+    const [isSavedToDb, setIsSavedToDb] = useState(false) // Track if already saved
     const router = useRouter()
 
     // Auto-select patient for patient users
@@ -60,31 +62,7 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
         initPatient()
     }, [userRole])
 
-    // Generate comparative note when results are ready
-    useEffect(() => {
-        const generateNote = async () => {
-            if (result && previousScan && !comparisonNote && !analyzingComparison) {
-                setAnalyzingComparison(true)
-                try {
-                    const response = await compareImagingTrends(previousScan, {
-                        scanType: result.scan_type || scanType,
-                        diagnosis: result.prediction,
-                        severity: result.severity,
-                        findings: result.findings
-                    })
 
-                    if (response.success) {
-                        setComparisonNote(response.summary)
-                    }
-                } catch (e) {
-                    console.error("Comparison generation failed", e)
-                } finally {
-                    setAnalyzingComparison(false)
-                }
-            }
-        }
-        generateNote()
-    }, [result, previousScan])
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -126,6 +104,11 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
     }
 
     const handleSave = async () => {
+        // Prevent double save if already saved by API
+        if (isSavedToDb) {
+            toast.info("Analysis already saved to patient record")
+            return
+        }
         if (!selectedPatientId || !result) return
         setSaving(true)
         setSaveMessage("")
@@ -136,7 +119,7 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
                 scanType: (result.scan_type || scanType).toUpperCase(),
                 diagnosis: result.prediction,
                 confidence: result.confidence * 100,
-                severity: result.severity || "Medium",
+                severity: result.severity || (result.prediction.toLowerCase().includes("normal") ? "Low" : "Medium"),
                 findings: {
                     result: result.prediction,
                     details: result.findings || []
@@ -148,6 +131,7 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
 
             const response = await saveImageAnalysis(apiData)
             if (!response.success) throw new Error(response.error)
+            setIsSavedToDb(true) // Mark as saved
             setSaveMessage("Saved to patient record!")
             handlePatientChange(selectedPatientId) // Refresh history
             router.refresh()
@@ -158,87 +142,6 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
         }
     }
 
-    const handleAnalyze = async () => {
-        if (!file) return
-        setLoading(true)
-        setError(null)
-        setResult(null)
-        setComparisonNote("")
-
-        const formData = new FormData()
-        formData.append("file", file)
-        formData.append("scan_type", scanType)
-        formData.append("explain", explain.toString())
-        formData.append("is_batch", isBatch.toString())
-        if (selectedPatientId) {
-            formData.append("patientId", selectedPatientId)
-        }
-
-        try {
-            const res = await fetch("/api/predict/image", {
-                method: "POST",
-                body: formData,
-            })
-
-            if (!res.ok) throw new Error("Failed to analyze image")
-
-            const responseJson = await res.json()
-            setResult(responseJson.success ? responseJson.data : responseJson)
-
-            if (responseJson.auto_corrected && responseJson.scan_type) {
-                const correctedType = responseJson.scan_type.toLowerCase()
-                if (correctedType.includes("x-ray")) setScanType("xray")
-                else if (correctedType.includes("ct")) setScanType("ct")
-                else if (correctedType.includes("mri")) setScanType("mri")
-            }
-
-            // Auto-save if patient is selected
-            // Auto-save if patient is selected
-            if (selectedPatientId && (responseJson.success || responseJson.prediction)) {
-                // If API already saved to DB, just refresh
-                if (responseJson.dbScanId) {
-                    setSaveMessage("Auto-saved to patient record")
-                    handlePatientChange(selectedPatientId)
-                    toast.success("Analysis saved to patient record")
-                    router.refresh()
-                } else {
-                    // Fallback: Manually save if API didn't
-                    const data = responseJson.success ? responseJson.data : responseJson
-                    try {
-                        setSaving(true)
-                        const apiData = {
-                            patientId: selectedPatientId,
-                            scanType: (data.scan_type || scanType).toUpperCase(),
-                            diagnosis: data.prediction,
-                            confidence: data.confidence * 100,
-                            severity: data.severity || "Medium",
-                            findings: {
-                                result: data.prediction,
-                                details: data.findings || []
-                            },
-                            recommendations: (data.recommendations || ["Consult Radiologist"]).join(", "),
-                            processingTime: data.processing_time || 0.3,
-                            modelVersion: data.model_info?.architecture || "DenseNet121"
-                        }
-                        await saveImageAnalysis(apiData)
-                        setSaveMessage("Auto-saved to patient record")
-                        handlePatientChange(selectedPatientId) // Refresh history
-                        toast.success("Analysis saved to patient record")
-                        router.refresh()
-                    } catch (saveError) {
-                        console.error("Auto-save failed", saveError)
-                        setSaveMessage("Auto-save failed")
-                    } finally {
-                        setSaving(false)
-                    }
-                }
-            }
-        } catch (err: any) {
-            setError(err.message || "Something went wrong")
-        } finally {
-            setLoading(false)
-        }
-    }
 
     const handleFeedback = async (correctLabel: string) => {
         if (!result?.id) return
@@ -276,6 +179,114 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
     const [retraining, setRetraining] = useState(false)
     const [showRetrainConfirm, setShowRetrainConfirm] = useState(false)
 
+    const [analysisStep, setAnalysisStep] = useState(0)
+    const [estimatedTime, setEstimatedTime] = useState(4)
+
+    // ANALYSIS STEPS DEFINITION
+    const ANALYSIS_STEPS = [
+        { id: 'norm', label: 'Image Normalization & Preprocessing', duration: 800 },
+        { id: 'feat', label: 'Feature Extraction (DenseNet-121)', duration: 1200 },
+        { id: 'infer', label: 'Model Inference & Anomaly Detection', duration: 1500 },
+        { id: 'risk', label: 'Risk Scoring & Confidence Calibration', duration: 800 }
+    ]
+
+    const handleAnalyze = async () => {
+        if (!file) {
+            toast.error("Please select an image first")
+            return
+        }
+
+        setLoading(true)
+        setResult(null)
+        setAnalysisStep(0)
+
+        // 1. Start Analysis Animation Sequence
+        // Standardized timing per step preference
+        setEstimatedTime(4)
+        const STEP_TIMINGS = [0, 600, 1400, 2200]
+
+        STEP_TIMINGS.forEach((delay, index) => {
+            setTimeout(() => {
+                if (loading) setAnalysisStep(index)
+            }, delay)
+        })
+
+        // Countdown Timer
+        const countInterval = setInterval(() => {
+            setEstimatedTime(prev => Math.max(0, prev - 1))
+        }, 1000)
+
+        const stepInterval = setInterval(() => {
+            // Keep interval primarily for fallback safety
+        }, 3000)
+
+        const formData = new FormData()
+        formData.append('file', file)
+
+        try {
+            // Actual API Call
+            const response = await fetch('/api/predict/image', {
+                method: 'POST',
+                body: formData
+            })
+
+            clearInterval(stepInterval)
+            clearInterval(countInterval)
+
+            // Ensure we show the final step before revealing
+            setAnalysisStep(ANALYSIS_STEPS.length - 1)
+            await new Promise(r => setTimeout(r, 600)) // Short pause on "Risk Scoring"
+
+            if (!response.ok) {
+                const errorData = await response.json()
+                throw new Error(errorData.error || 'Analysis failed')
+            }
+
+            const data = await response.json()
+            setResult(data)
+
+            // Add to history
+            if (data) {
+                await saveAnalysisToHistory(data)
+            }
+
+        } catch (error) {
+            console.error("Analysis error:", error)
+            toast.error(error instanceof Error ? error.message : "Failed to analyze image")
+        } finally {
+            setLoading(false)
+            setRegistryOpen(false) // Collapse registry to focus on result
+        }
+    }
+
+    const saveAnalysisToHistory = async (data: any) => {
+        if (!selectedPatientId) return; // Cannot save history without patient
+
+        try {
+            const apiData = {
+                patientId: selectedPatientId,
+                scanType: (result?.scan_type || scanType).toUpperCase(),
+                diagnosis: data.prediction,
+                confidence: data.confidence * 100,
+                severity: data.severity || (data.prediction.toLowerCase().includes("normal") ? "Low" : "Medium"),
+                findings: {
+                    result: data.prediction,
+                    details: data.findings || []
+                },
+                recommendations: ["Consult Radiologist"],
+                processingTime: result?.processing_time || 0.4,
+                modelVersion: "DenseNet121"
+            }
+
+            // prevent duplicate saves if manually handled later? 
+            // Actually, usually automatic history is good, but if we want to add to DB:
+            await saveImageAnalysis(apiData)
+            router.refresh()
+        } catch (e) {
+            console.error("Failed to save history", e)
+        }
+    }
+
     const handleRetrain = async () => {
         setRetraining(true)
         try {
@@ -311,399 +322,485 @@ export function AnalysisClient({ userRole }: AnalysisClientProps) {
 
     const isPatient = userRole === 'patient' || userRole === 'user'
 
+    // Determine if critical
+    const isCritical =
+        result?.prediction?.toLowerCase().includes("malignant") ||
+        result?.prediction?.toLowerCase().includes("pneumonia") ||
+        result?.prediction?.toLowerCase().includes("tumor") ||
+        result?.severity?.toLowerCase() === "high" ||
+        result?.severity?.toLowerCase() === "critical"
+
+    const [registryOpen, setRegistryOpen] = useState(false)
+
     return (
-        <div className="space-y-8 max-w-6xl mx-auto">
-            {/* Scan Type Selection */}
-            <div className="health-card p-6 relative overflow-hidden group bg-card/95 backdrop-blur-sm">
-                <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-cyan-500/5" />
-                <div className="relative z-10 space-y-4">
-                    <div className="flex justify-between items-center">
-                        <div className="space-y-1">
-                            <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                                <Scan className="h-4 w-4 text-violet-400" />
-                                Modality Selection
-                            </h3>
-                            <p className="text-xs text-muted-foreground/70">Choose imaging type for neural processing</p>
-                        </div>
-                        {!isPatient && (
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setShowRetrainConfirm(true)}
-                                disabled={retraining}
-                                className="glass-panel h-8 border-violet-500/30 text-violet-300 hover:bg-violet-500/20 gap-2 hover-glow"
-                            >
-                                <Brain className={cn("h-3.5 w-3.5", retraining && "animate-pulse")} />
-                                {retraining ? "Training..." : "Retrain Model"}
-                            </Button>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start w-full relative">
+            {/* Ambient Background Drift */}
+            <div className="fixed inset-0 pointer-events-none z-[-1] opacity-[0.03] animate-drift-slow bg-gradient-to-r from-violet-500 via-fuchsia-500 to-cyan-500" />
+
+            {/* CSS for Scan Sweep Animation */}
+            <style jsx global>{`
+                @keyframes scan-sweep {
+                    0% { top: -10%; opacity: 0; }
+                    5% { opacity: 1; }
+                    95% { opacity: 1; }
+                    100% { top: 110%; opacity: 0; }
+                }
+                .animate-scan-sweep {
+                    animation: scan-sweep 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+                    background: linear-gradient(to bottom, transparent 0%, rgba(139, 92, 246, 0.05) 50%, rgba(139, 92, 246, 0.4) 90%, rgba(56, 189, 248, 0.9) 100%);
+                    box-shadow: 0 4px 20px rgba(139, 92, 246, 0.5), 0 0 15px rgba(56, 189, 248, 0.8);
+                    border-bottom: 2px solid rgba(56, 189, 248, 1);
+                }
+            `}</style>
+
+            {/* LEFT COLUMN - STICKY CONTEXT (Reduced to ~33%) */}
+            <div className="lg:col-span-4 sticky top-24 space-y-5 h-fit z-10">
+                {/* 1. Scan Context / Preview */}
+                <div className="hospital-card flex flex-col shadow-sm">
+                    <div className="p-4 border-b border-border/10 flex justify-between items-center bg-white/50 dark:bg-white/5">
+                        <h3 className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
+                            <Scan className={cn("h-3.5 w-3.5 text-violet-500", loading && "animate-spin-slow")} />
+                            Scan Context
+                        </h3>
+                        {result && (
+                            <Badge variant="outline" className="backdrop-blur-md bg-emerald-500/10 border-emerald-500/20 text-emerald-600 shadow-[0_0_10px_rgba(16,185,129,0.2)] text-[9px] px-2 py-0.5 h-5 animate-in fade-in zoom-in-95 duration-500">
+                                ANALYZED
+                            </Badge>
                         )}
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        {SCAN_TYPES.map((type) => (
-                            <button
-                                key={type.id}
-                                onClick={() => setScanType(type.id)}
-                                className={cn(
-                                    "relative p-5 rounded-2xl border-2 transition-all duration-500 text-left group overflow-hidden",
-                                    scanType === type.id
-                                        ? "border-violet-500/50 bg-violet-500/10 shadow-[0_0_25px_-5px_oklch(from_var(--primary)_l_c_h_/_0.3)]"
-                                        : "border-white/5 bg-white/5 hover:border-white/20 hover:bg-white/10"
+
+                    <div
+                        className="relative group cursor-pointer bg-slate-50 dark:bg-black/20 min-h-[380px] flex flex-col transition-all active:scale-[0.99]"
+                        onClick={() => document.getElementById('file-upload')?.click()}
+                        onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+                        onDragLeave={() => setIsDragging(false)}
+                        onDrop={handleDrop}
+                    >
+                        {/* Hidden Input */}
+                        <input type="file" id="file-upload" className="hidden" onChange={handleFileChange} accept="image/*,.zip" />
+
+                        {/* Image Display or Upload Prompts */}
+                        {preview || result?.image_url || result?.file_url ? (
+                            <div className="flex-1 relative flex items-center justify-center bg-zinc-950 overflow-hidden">
+                                <img
+                                    src={result?.image_url || result?.file_url || preview}
+                                    className={cn(
+                                        "w-full h-full object-contain max-h-[440px] transition-all duration-700",
+                                        loading ? "opacity-60 scale-[1.02] blur-[1px]" : "opacity-100"
+                                    )}
+                                    alt="Scan"
+                                />
+
+                                {/* SCAN SWEEP EFFECT - DUAL LAYER */}
+                                {loading && (
+                                    <>
+                                        {/* 1. Primary Scan Line */}
+                                        <div className="absolute left-0 right-0 h-24 w-full z-20 animate-scan-sweep border-t border-violet-500/30 opacity-60" />
+
+                                        {/* 2. Micro Noise Shimmer (Subtle) */}
+                                        <div className="absolute inset-0 z-10 bg-[url('data:image/svg+xml,%3Csvg%20viewBox%3D%220%200%20200%20200%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cfilter%20id%3D%22noiseFilter%22%3E%3CfeTurbulence%20type%3D%22fractalNoise%22%20baseFrequency%3D%220.65%22%20numOctaves%3D%223%22%20stitchTiles%3D%22stitch%22%2F%3E%3C%2Ffilter%3E%3Crect%20width%3D%22100%25%22%20height%3D%22100%25%22%20filter%3D%22url(%23noiseFilter)%22%2F%3E%3C%2Fsvg%3E')] opacity-[0.05] animate-shimmer-slow pointer-events-none mix-blend-overlay" />
+                                    </>
                                 )}
-                            >
-                                <div className={cn(
-                                    "text-3xl mb-3 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-6",
-                                    scanType === type.id && "scale-110"
-                                )}>
-                                    {type.icon}
-                                </div>
-                                <div className="space-y-1">
-                                    <p className="font-bold text-foreground tracking-tight">{type.name}</p>
-                                    <p className="text-[10px] text-muted-foreground leading-tight">{type.description}</p>
-                                </div>
-                                {scanType === type.id && (
-                                    <div className="absolute top-3 right-3">
-                                        <div className="h-2 w-2 rounded-full bg-violet-400 animate-pulse" />
+
+                                {/* Hover Overlay */}
+                                {!loading && (
+                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white gap-2">
+                                        <Upload className="h-8 w-8 text-white/80" />
+                                        <span className="text-xs font-medium">Click to change scan</span>
                                     </div>
                                 )}
+                            </div>
+                        ) : (
+                            <div className={cn(
+                                "flex-1 flex flex-col items-center justify-center p-8 text-center space-y-4 transition-colors",
+                                isDragging ? "bg-violet-500/10" : ""
+                            )}>
+                                <div className="h-16 w-16 rounded-2xl bg-violet-500/10 flex items-center justify-center">
+                                    <Upload className={cn("h-8 w-8 text-violet-500", isDragging && "animate-bounce")} />
+                                </div>
+                                <div>
+                                    <p className="font-bold text-foreground">Upload Scan</p>
+                                    <p className="text-xs text-muted-foreground mt-1">Drag & drop or click to browse</p>
+                                </div>
+                                <div className="flex gap-1.5 opacity-60">
+                                    {['DICOM', 'PNG', 'JPEG'].map(ext => (
+                                        <span key={ext} className="text-[9px] border px-1.5 py-0.5 rounded text-muted-foreground">{ext}</span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Analysis Trigger - Footer of Card */}
+                        <div className="p-4 border-t border-border/10 bg-white dark:bg-white/5">
+                            <Button
+                                className={cn(
+                                    "w-full h-11 text-white font-bold rounded-xl shadow-lg transition-all active:scale-[0.98]",
+                                    loading
+                                        ? "bg-slate-100 dark:bg-white/10 text-muted-foreground cursor-wait shadow-none"
+                                        : "bg-violet-600 hover:bg-violet-500 shadow-violet-500/20"
+                                )}
+                                disabled={!file || loading}
+                                onClick={(e) => { e.stopPropagation(); handleAnalyze() }}
+                            >
+                                {loading ? (
+                                    <div className="flex items-center gap-3">
+                                        <div className="relative">
+                                            <div className="h-4 w-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                                        </div>
+                                        <span className="text-xs font-bold uppercase tracking-wider">
+                                            {ANALYSIS_STEPS[analysisStep]?.label || "Processing..."}
+                                        </span>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <Brain className="mr-2 h-4 w-4 animate-brain-pulse text-white" />
+                                        <span className="relative z-10">Run Diagnostics</span>
+                                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 2. Metadata - Fade out slightly during loading */}
+                <div className={cn(
+                    "hospital-card p-5 space-y-4 transition-opacity duration-500",
+                    loading ? "opacity-50 grayscale" : "opacity-100"
+                )}>
+                    <h4 className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground mb-3">
+                        Acquisition Metadata
+                    </h4>
+
+                    {/* Modality Selector */}
+                    <div className="grid grid-cols-3 gap-3">
+                        {SCAN_TYPES.map(type => (
+                            <button
+                                key={type.id}
+                                disabled={loading}
+                                onClick={() => setScanType(type.id)}
+                                className={cn(
+                                    "relative flex flex-col items-center justify-center py-3 px-2 rounded-2xl border transition-all duration-300 group overflow-hidden",
+                                    scanType === type.id
+                                        ? "bg-violet-500/5 dark:bg-violet-500/10 border-violet-500/30 text-violet-700 dark:text-violet-300 shadow-[0_0_15px_rgba(139,92,246,0.15)] scale-[1.02]"
+                                        : "border-transparent bg-slate-50 dark:bg-white/5 text-muted-foreground hover:bg-slate-100 dark:hover:bg-white/10 opacity-70 hover:opacity-100"
+                                )}
+                            >
+                                {scanType === type.id && (
+                                    <div className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-violet-500 shadow-[0_0_6px_rgba(139,92,246,0.8)] animate-pulse" />
+                                )}
+                                <span className={cn("text-xl mb-1.5 transition-transform duration-300", scanType === type.id && "scale-110")}>{type.icon}</span>
+                                <span className="text-[9px] font-bold uppercase tracking-[0.2em]">{type.name}</span>
                             </button>
                         ))}
+                    </div>
+
+                    {/* File Info */}
+                    {file && (
+                        <div className="bg-slate-50/50 dark:bg-white/5 rounded-2xl p-3 flex items-center gap-3 border border-border/20">
+                            <div className="p-2 bg-blue-500/10 text-blue-500 rounded-xl">
+                                <ImageIcon className="h-4 w-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold truncate">{file.name}</p>
+                                <p className="text-[10px] text-muted-foreground tracking-wide">{(file.size / (1024 * 1024)).toFixed(2)} MB • {isBatch ? 'Batch Archive' : 'Single Image'}</p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* 3. System Status */}
+                <div className="hospital-card p-4 space-y-3">
+                    <h4 className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
+                        <Activity className="h-3 w-3 text-amber-500" />
+                        System Telemetry
+                    </h4>
+                    <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                            <span className="text-muted-foreground">Neural Engine</span>
+                            <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
+                                <span className="relative flex h-2 w-2">
+                                    <span className={cn("animate-dark-ripple absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-80", loading && "duration-1000")} />
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
+                                </span>
+                                Online
+                            </span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                            <span className="text-muted-foreground">Inference Latency</span>
+                            <span className="font-bold font-mono text-foreground">{loading ? <span className="animate-pulse">Measuring...</span> : (result?.processing_time || 0.8) + 's'}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                            <span className="text-muted-foreground">GPU Load</span>
+                            <span className="font-bold font-mono text-foreground animate-in fade-in duration-1000">{loading ? 89 : 72}%</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                            <div
+                                className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full transition-all duration-1000 ease-out"
+                                style={{ width: loading ? '89%' : '72%', transform: 'translateX(0)', animation: 'slideRight 1s ease-out' }}
+                            />
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* Retrain Confirmation Modal */}
-            {showRetrainConfirm && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
-                    <div className="glass-panel-heavy p-8 rounded-3xl max-w-md w-full space-y-6 border-violet-500/30">
-                        <div className="h-16 w-16 rounded-2xl bg-violet-500/20 flex items-center justify-center mx-auto mb-4">
-                            <Brain className="h-8 w-8 text-violet-400" />
-                        </div>
-                        <div className="text-center space-y-2">
-                            <h3 className="text-xl font-bold text-foreground">Initiate Neural Retraining?</h3>
-                            <p className="text-sm text-muted-foreground leading-relaxed">
-                                This will fine-tune the {scanType.toUpperCase()} architecture using validated clinical feedback.
-                                <span className="block mt-1 text-violet-400 font-medium">Estimated duration: 3-5 minutes.</span>
-                            </p>
-                        </div>
-                        <div className="flex gap-3">
-                            <Button variant="ghost" className="flex-1 rounded-xl" onClick={() => setShowRetrainConfirm(false)}>Abort</Button>
-                            <Button className="flex-1 bg-violet-600 hover:bg-violet-500 rounded-xl" onClick={handleRetrain}>Confirm retrain</Button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* RIGHT COLUMN - SCROLLABLE CONTENT */}
+            <div className="lg:col-span-8 space-y-6 pb-24">
 
-            <div className="grid gap-8 lg:grid-cols-12">
-                {/* Upload & Controls */}
-                <div className="lg:col-span-5 space-y-6">
-                    <div className="health-card overflow-hidden flex flex-col h-full bg-card/95 backdrop-blur-sm">
-                        <div className="p-5 border-b border-border/30 bg-gradient-to-r from-cyan-500/5 to-transparent">
-                            <h3 className="text-sm font-bold flex items-center gap-2 uppercase tracking-widest">
-                                <Upload className="h-4 w-4 text-cyan-400" />
-                                Acquisition
-                            </h3>
-                        </div>
-                        <div className="p-8 flex-1 flex flex-col space-y-6">
-                            <div
-                                className={cn(
-                                    "relative flex-1 min-h-[300px] border-2 border-dashed rounded-3xl transition-all duration-500 flex flex-col items-center justify-center gap-6 cursor-pointer group",
-                                    isDragging ? "border-violet-500 bg-violet-500/10" : "border-white/10 hover:border-violet-400/30 hover:bg-white/[0.03]",
-                                    loading && "animate-scan"
-                                )}
-                                onClick={() => document.getElementById('file-upload')?.click()}
-                                onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
-                                onDragLeave={() => setIsDragging(false)}
-                                onDrop={handleDrop}
-                            >
-                                {preview ? (
-                                    <div className="relative w-full h-full p-4 p-center flex items-center justify-center">
-                                        <img src={preview} alt="Input" className="max-h-[250px] rounded-2xl shadow-2xl transition-transform duration-700 group-hover:scale-[1.02]" />
-                                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/40 to-transparent rounded-2xl" />
-                                    </div>
-                                ) : isBatch ? (
-                                    <div className="p-8 bg-violet-500/10 rounded-2xl border border-violet-500/20 flex flex-col items-center gap-4 animate-in zoom-in duration-300">
-                                        <div className="h-16 w-16 rounded-full bg-violet-500/20 flex items-center justify-center">
-                                            <FileWarning className="h-8 w-8 text-violet-400" />
-                                        </div>
-                                        <div className="text-center">
-                                            <p className="text-sm font-bold text-foreground">{file?.name}</p>
-                                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">Batch Archive Locked</p>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="text-center space-y-4">
-                                        <div className="h-20 w-20 rounded-3xl bg-white/5 flex items-center justify-center mx-auto group-hover:scale-110 group-hover:bg-violet-500/10 transition-all duration-500">
-                                            <ImageIcon className="h-10 w-10 text-slate-500 group-hover:text-violet-400 transition-colors" />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <p className="text-sm font-bold text-foreground">Drop clinical imaging</p>
-                                            <p className="text-xs text-muted-foreground">Supports DICOM, JPEG, PNG, ZIP</p>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            <input type="file" id="file-upload" className="hidden" onChange={handleFileChange} accept="image/*,.zip" />
-
-                            <div className="space-y-4">
-                                <div className="glass-panel p-4 rounded-2xl flex items-center justify-between border-white/5">
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 rounded-lg bg-cyan-500/10">
-                                            <Sparkles className="h-4 w-4 text-cyan-400" />
-                                        </div>
-                                        <div>
-                                            <Label className="text-sm font-bold text-foreground">Explainable AI (XAI)</Label>
-                                            <p className="text-[10px] text-muted-foreground">Enable feature saliency maps</p>
-                                        </div>
-                                    </div>
-                                    <Switch checked={explain} onCheckedChange={setExplain} className="data-[state=checked]:bg-cyan-500" />
+                {/* 1. LOADING STATE OR DIAGNOSTIC VERDICT */}
+                {loading ? (
+                    /* PROFESSIONAL PROGRESS STEPS */
+                    <div className="health-card p-8 border-2 border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-card/50 rounded-3xl animate-in fade-in zoom-in-95 duration-300">
+                        <div className="max-w-md mx-auto space-y-8">
+                            <div className="text-center space-y-2">
+                                <div className="h-16 w-16 bg-violet-100 dark:bg-violet-900/20 text-violet-600 rounded-2xl flex items-center justify-center mx-auto mb-4 relative overflow-hidden">
+                                    <Brain className="h-8 w-8 animate-pulse" />
+                                    <div className="absolute inset-x-0 bottom-0 h-1 bg-violet-500 animate-slide-right" />
                                 </div>
+                                <h3 className="text-lg font-bold">Analyzing Scan Data</h3>
+                                <p className="text-sm text-muted-foreground animate-pulse">Estimated completion: ~{estimatedTime} seconds</p>
+                            </div>
 
-                                <Button
-                                    className="w-full h-14 text-white font-bold rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 shadow-xl shadow-violet-500/20 hover-glow group transition-all duration-300"
-                                    disabled={!file || loading}
-                                    onClick={handleAnalyze}
-                                >
-                                    {loading ? (
-                                        <Loader2 className="mr-3 h-5 w-5 animate-spin" />
-                                    ) : (
-                                        <Scan className="mr-3 h-5 w-5 group-hover:scale-110 transition-transform" />
-                                    )}
-                                    {loading ? "PROCESSING NEURAL LAYERS..." : "EXECUTE AI ANALYSIS"}
-                                </Button>
+                            <div className="space-y-0 relative pl-4">
+                                {/* Connecting Line */}
+                                <div className="absolute left-[27px] top-6 bottom-6 w-0.5 bg-gradient-to-b from-emerald-500/50 via-emerald-500/20 to-transparent" />
+
+                                {ANALYSIS_STEPS.map((step, index) => (
+                                    <div
+                                        key={step.id}
+                                        style={{
+                                            animationDelay: `${index * 150}ms`,
+                                            transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)'
+                                        }}
+                                        className={cn(
+                                            "flex items-center gap-4 p-4 rounded-2xl border transition-all duration-500 relative bg-white/50 dark:bg-transparent backdrop-blur-sm",
+                                            index === analysisStep
+                                                ? "border-violet-500/30 shadow-lg shadow-violet-500/5 scale-[1.02] z-10"
+                                                : index < analysisStep
+                                                    ? "border-transparent opacity-60"
+                                                    : "border-transparent opacity-30 blur-[0.5px]"
+                                        )}
+                                    >
+                                        <div className="shrink-0 relative z-10 bg-card rounded-full">
+                                            {index < analysisStep ? (
+                                                <div className="h-6 w-6 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/20">
+                                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                                </div>
+                                            ) : index === analysisStep ? (
+                                                <div className="h-6 w-6 rounded-full border-[3px] border-violet-500 border-t-transparent animate-spin" />
+                                            ) : (
+                                                <div className="h-6 w-6 rounded-full border-2 border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-white/5" />
+                                            )}
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className={cn(
+                                                "text-xs font-bold tracking-wide uppercase",
+                                                index === analysisStep ? "text-violet-600 dark:text-violet-400" : "text-muted-foreground"
+                                            )}>
+                                                {step.label}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     </div>
-                </div>
+                ) : result ? (
+                    /* 1. DIAGNOSTIC VERDICT (Top Priority) */
+                    <div className={cn(
+                        "relative overflow-hidden rounded-3xl border border-border/10 bg-white dark:bg-zinc-900 animate-in fade-in slide-in-from-bottom-4 duration-700 transition-all",
+                        isCritical
+                            ? "shadow-[0_0_50px_-12px_rgba(225,29,72,0.25)] border-rose-500/20"
+                            : "shadow-[0_0_50px_-12px_rgba(16,185,129,0.25)] border-emerald-500/20"
+                    )}>
+                        {/* Ambient Background Blob */}
+                        <div className={cn(
+                            "absolute -top-20 -right-20 w-64 h-64 rounded-full blur-[80px] opacity-20 pointer-events-none",
+                            isCritical ? "bg-rose-500" : "bg-emerald-500"
+                        )} />
 
-                {/* AI Insights & Results */}
-                <div className="lg:col-span-7 space-y-6">
-                    <div className="health-card h-full bg-card/95 backdrop-blur-sm flex flex-col">
-                        <div className="p-5 border-b border-border/30 bg-gradient-to-r from-violet-500/5 to-transparent flex justify-between items-center">
-                            <h3 className="text-sm font-bold flex items-center gap-2 uppercase tracking-widest">
-                                <Activity className="h-4 w-4 text-violet-400" />
-                                Diagnostics
-                            </h3>
-                            {result && (
-                                <Badge className={cn("px-3 py-1 rounded-full text-[10px] font-bold tracking-tighter uppercase border-none",
-                                    result.severity === "Critical" ? "bg-rose-500 text-white" :
-                                        result.severity === "High" ? "bg-amber-500 text-black" : "bg-emerald-500 text-white")}>
-                                    {result.severity} Priority
-                                </Badge>
-                            )}
-                        </div>
+                        <div className={cn(
+                            "absolute top-0 left-0 w-1.5 h-full transition-all duration-1000",
+                            isCritical ? 'bg-rose-500' : 'bg-emerald-500'
+                        )} />
 
-                        <div className="p-8 flex-1">
-                            {result ? (
-                                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                                    {/* Primary Result Card */}
-                                    <div className={cn(
-                                        "p-6 rounded-[32px] border flex flex-col md:flex-row items-center gap-6 relative overflow-hidden group hover:scale-[1.01] transition-transform duration-500",
-                                        result.severity === "Normal" ? "gradient-normal" :
-                                            result.severity === "Medium" ? "gradient-warning" : "gradient-critical"
+                        <div className="p-8 pl-10">
+                            <div className="flex flex-col sm:flex-row justify-between items-start gap-8">
+                                <div>
+                                    <h5 className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.2em] mb-4 flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-700 delay-100">
+                                        <Brain className="h-3.5 w-3.5" />
+                                        Primary Diagnosis
+                                    </h5>
+                                    <h2 className={cn(
+                                        "text-4xl font-black tracking-tighter mb-2 animate-in fade-in zoom-in-95 duration-700 delay-200",
+                                        isCritical ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"
                                     )}>
-                                        <div className={cn(
-                                            "h-20 w-20 rounded-full flex items-center justify-center shrink-0 shadow-2xl",
-                                            result.severity === "Normal" ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
-                                        )}>
-                                            {result.severity === "Normal" ? <CheckCircle2 className="h-10 w-10" /> : <AlertCircle className="h-10 w-10" />}
-                                        </div>
-                                        <div className="text-center md:text-left space-y-1">
-                                            <h3 className="text-2xl md:text-3xl font-black text-foreground tracking-tight">{result.prediction}</h3>
-                                            <div className="flex items-center justify-center md:justify-start gap-4">
-                                                <div className="flex items-center gap-1.5 grayscale opacity-70 group-hover:grayscale-0 group-hover:opacity-100 transition-all">
-                                                    <Brain className="h-3 w-3 text-violet-400" />
-                                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{result.model_info?.architecture || "Inference Engine V3"}</span>
-                                                </div>
-                                                <span className="h-4 w-[1px] bg-border/40" />
-                                                <div className="flex items-center gap-1.5">
-                                                    <Clock className="h-3 w-3 text-muted-foreground" />
-                                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{(result.processing_time || 0.8).toFixed(2)}s Latency</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Confidence Metrics */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="health-card p-5 space-y-4 bg-card/95 backdrop-blur-sm">
-                                            <div className="flex justify-between items-end">
-                                                <div className="space-y-1">
-                                                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Statistical Certainty</p>
-                                                    <p className="text-2xl font-black text-foreground">{(result.confidence * 100).toFixed(1)}%</p>
-                                                </div>
-                                                {result.confidence_metrics && (
-                                                    <ConfidenceBadge
-                                                        confidence={result.confidence_metrics.confidence}
-                                                        uncertainty={result.confidence_metrics.uncertainty_level}
-                                                        reviewRequired={result.confidence_metrics.review_required}
-                                                    />
-                                                )}
-                                            </div>
-                                            <div className="h-2 rounded-full bg-white/5 overflow-hidden">
-                                                <div
-                                                    className="h-full bg-gradient-to-r from-violet-500 to-cyan-400 rounded-full transition-all duration-1000 shadow-[0_0_10px_oklch(from_var(--primary)_l_c_h_/_0.5)]"
-                                                    style={{ width: `${result.confidence * 100}%` }}
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="health-card p-5 flex flex-col justify-center gap-3 bg-card/95 backdrop-blur-sm">
-                                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Explainable Heatmap</p>
-                                            <div className="flex items-center gap-3">
-                                                {result.explanation_url ? (
-                                                    <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-bold animate-pulse">
-                                                        FEATURE SALIENCY GENERATED
-                                                    </div>
-                                                ) : (
-                                                    <div className="p-2 rounded-lg bg-white/5 text-slate-500 text-xs font-medium">
-                                                        Visual explanation disabled
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* XAI Viewer */}
-                                    {result.explanation_url && preview && (
-                                        <div className="animate-in fade-in zoom-in-95 duration-700 delay-300">
-                                            <HeatmapViewer
-                                                originalImage={preview}
-                                                heatmapUrl={`http://localhost:8000${result.explanation_url}`}
-                                            />
-                                        </div>
-                                    )}
-
-                                    {/* Medical Report Findings */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        {result.findings?.length > 0 && (
-                                            <div className="space-y-4">
-                                                <h4 className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                                                    <Stethoscope className="h-4 w-4 text-violet-400" />
-                                                    Clinical Findings
-                                                </h4>
-                                                <div className="space-y-2">
-                                                    {result.findings.map((f: string, i: number) => (
-                                                        <div key={i} className="group p-3.5 rounded-xl bg-card border border-border/40 hover:border-violet-500/30 transition-all shadow-sm hover:shadow-md">
-                                                            <p className="text-xs text-muted-foreground leading-relaxed group-hover:text-foreground transition-colors font-medium flex gap-2">
-                                                                <span className="text-violet-500 mt-0.5">•</span>
-                                                                {f}
-                                                            </p>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        <div className="space-y-6">
-                                            {/* Historical Comparison */}
-                                            {previousScan && (
-                                                <div className="health-card p-5 rounded-3xl border-violet-500/20 bg-gradient-to-br from-violet-500/5 to-transparent relative overflow-hidden animate-in slide-in-from-right-4 duration-700 delay-500">
-                                                    <div className="absolute top-0 right-0 p-4 opacity-10">
-                                                        <Clock className="h-12 w-12 text-violet-300" />
-                                                    </div>
-                                                    <h4 className="text-[11px] font-bold text-violet-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                                        Longitudinal Contrast
-                                                    </h4>
-                                                    <div className="flex gap-4 items-start">
-                                                        <div className="w-14 h-14 rounded-xl border border-border/20 overflow-hidden shrink-0 group hover:scale-110 transition-transform duration-500 shadow-sm">
-                                                            <img src={previousScan.imageUrl} className="w-full h-full object-cover grayscale opacity-80 group-hover:opacity-100 group-hover:grayscale-0 transition-all" />
-                                                        </div>
-                                                        <div className="space-y-1 mt-1">
-                                                            <p className="text-[10px] font-bold text-foreground uppercase">{previousScan.diagnosis}</p>
-                                                            <p className="text-[9px] text-muted-foreground italic">Scan date: {new Date(previousScan.createdAt).toLocaleDateString()}</p>
-                                                        </div>
-                                                    </div>
-                                                    {comparisonNote && (
-                                                        <div className="mt-4 p-3 rounded-xl bg-card/50 border border-violet-500/10 border-l-violet-500 border-l-2">
-                                                            <p className="text-[10px] text-muted-foreground leading-relaxed italic line-clamp-2">“{comparisonNote}”</p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {/* Trend Visualization */}
-                                            {historyData.length > 0 && (
-                                                <div className="space-y-4 animate-in fade-in duration-700 delay-700">
-                                                    <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                                                        Patient Trajectory
-                                                    </h4>
-                                                    <div className="h-[120px]">
-                                                        <PatientTrendChart data={historyData} />
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Action Footers */}
-                                    <div className="pt-6 border-t border-border/20 flex flex-col md:flex-row gap-4">
-                                        {!feedbackSent && (
-                                            <div className="flex-1 space-y-3">
-                                                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Human-in-the-Loop Validation</p>
-                                                <div className="flex flex-wrap gap-2">
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="h-9 px-4 rounded-xl border-emerald-500/20 bg-emerald-500/5 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-500 hover:border-emerald-500/30 transition-all font-semibold"
-                                                        onClick={() => handleFeedback(result.prediction)}
-                                                    >
-                                                        <CheckCircle2 className="mr-2 h-3.5 w-3.5" />
-                                                        Confirm Detection
-                                                    </Button>
-                                                    {getPossibleLabels().filter(l => l !== result.prediction).map(l => (
-                                                        <Button
-                                                            key={l}
-                                                            size="sm"
-                                                            variant="outline"
-                                                            className="h-9 px-4 rounded-xl border-border/40 text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-all font-medium"
-                                                            onClick={() => handleFeedback(l)}
-                                                        >
-                                                            Mark as {l}
-                                                        </Button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {!isPatient && (
-                                            <div className="w-full md:w-auto flex flex-col justify-end gap-3">
-                                                <div className="w-full md:w-[240px]">
-                                                    <PatientSelector onSelect={handlePatientChange} />
-                                                </div>
-                                                <Button
-                                                    onClick={handleSave}
-                                                    disabled={!selectedPatientId || saving}
-                                                    className="w-full h-10 rounded-xl bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-500/20 font-bold text-xs"
-                                                >
-                                                    {saving ? (
-                                                        <>
-                                                            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                                                            Archiving...
-                                                        </>
-                                                    ) : (
-                                                        "Commit to Patient Record"
-                                                    )}
-                                                </Button>
-                                                {saveMessage && <p className="text-[10px] text-center text-emerald-400 font-bold animate-in fade-in">{saveMessage}</p>}
-                                            </div>
-                                        )}
-                                    </div>
+                                        {result.prediction}
+                                    </h2>
+                                    <p className="text-sm text-muted-foreground font-medium max-w-lg leading-relaxed animate-in fade-in slide-in-from-bottom-2 duration-700 delay-300">
+                                        The analysis indicates <span className="text-foreground font-bold">{result.prediction}</span> with
+                                        a confidence interval of <span className="text-foreground font-bold font-mono">{(result.confidence * 100).toFixed(1)}%</span>.
+                                        {isCritical ? " This requires immediate clinical review." : " No acute abnormalities detected."}
+                                    </p>
                                 </div>
-                            ) : (
-                                <div className="h-full flex flex-col items-center justify-center text-center space-y-6 opacity-30 min-h-[400px]">
-                                    <div className="relative">
-                                        <Scan className="h-20 w-20 text-slate-400" />
-                                        <div className="absolute inset-0 bg-violet-500/20 blur-2xl rounded-full" />
+
+                                <div className="flex flex-col gap-2 min-w-[140px] animate-in fade-in slide-in-from-right-4 duration-700 delay-500">
+                                    <div className="p-3 bg-slate-50 dark:bg-white/5 rounded-xl border border-border/50 text-center">
+                                        <p className="text-[10px] uppercase text-muted-foreground font-bold">Confidence</p>
+                                        <p className="text-2xl font-black font-mono text-foreground">{(result.confidence * 100).toFixed(1)}%</p>
                                     </div>
-                                    <div className="space-y-2">
-                                        <h4 className="text-xl font-black text-slate-200 uppercase tracking-tight">System Idle</h4>
-                                        <p className="text-xs text-slate-500 max-w-[240px] leading-relaxed mx-auto italic">
-                                            Telemetry stream ready. Upload a medical scan to initiate neural diagnostic analysis.
+                                    <div className="p-3 bg-slate-50 dark:bg-white/5 rounded-xl border border-border/50 text-center">
+                                        <p className="text-[10px] uppercase text-muted-foreground font-bold">Severity</p>
+                                        <p className={cn("text-lg font-black uppercase", isCritical ? "text-rose-500" : "text-emerald-500")}>
+                                            {result.prediction?.toLowerCase().includes("normal") ? "LOW" : result.severity || "MEDIUM"}
                                         </p>
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* Divider */}
+                            <div className="h-px w-full bg-border/40 my-6" />
+
+                            {/* HUMAN VALIDATION */}
+                            {!feedbackSent && (
+                                <div className="flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-2 duration-700 delay-700">
+                                    <h5 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                                        Physician Verification Required
+                                    </h5>
+                                    <div className="flex flex-wrap gap-3">
+                                        <Button
+                                            size="lg"
+                                            className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl shadow-lg shadow-emerald-500/20 hover:scale-[1.02] transition-transform"
+                                            onClick={() => handleFeedback(result.prediction)}
+                                        >
+                                            <CheckCircle2 className="mr-2 h-5 w-5" />
+                                            Confirm Diagnosis
+                                        </Button>
+
+                                        {getPossibleLabels().filter(l => l !== result.prediction).map(l => (
+                                            <Button
+                                                key={l}
+                                                variant="outline"
+                                                size="lg"
+                                                className="border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl"
+                                                onClick={() => handleFeedback(l)}
+                                            >
+                                                Mark as {l}
+                                            </Button>
+                                        ))}
+                                    </div>
+                                </div>
                             )}
+                        </div>
+                    </div>
+                ) : (
+                    /* EMPTY STATE HERO - REFINED */
+                    <div className="health-card p-12 text-center border-dashed border-2 border-slate-200 dark:border-white/10 bg-slate-50/30 dark:bg-white/5 rounded-3xl animate-in fade-in duration-500 relative overflow-hidden group">
+                        <div className="absolute inset-0 bg-grid-pattern opacity-[0.03] pointer-events-none group-hover:opacity-[0.05] transition-opacity" />
+                        <div className="relative z-10 flex flex-col items-center">
+                            <div className="h-24 w-24 bg-gradient-to-br from-violet-100 to-indigo-50 dark:from-violet-500/10 dark:to-indigo-500/5 text-violet-500 rounded-full flex items-center justify-center mb-6 shadow-inner border border-white/50 dark:border-white/5">
+                                <div className="h-16 w-16 bg-white dark:bg-white/10 rounded-full flex items-center justify-center shadow-lg shadow-violet-500/10">
+                                    <Scan className="h-8 w-8 text-violet-600 dark:text-violet-400 opacity-80" />
+                                </div>
+                            </div>
+                            <h3 className="text-2xl font-bold text-foreground mb-3 tracking-tight">Ready for Analysis</h3>
+                            <p className="text-sm text-muted-foreground max-w-sm mx-auto leading-relaxed">
+                                Select a patient scan from the left panel to initialize the <span className="font-semibold text-violet-600 dark:text-violet-400">Deep Learning Diagnostic Engine</span>.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {/* 2. INSIGHTS GRID (Merged) */}
+                {result && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-500">
+                        <div className="flex items-center gap-2 px-1">
+                            <Sparkles className="h-4 w-4 text-violet-500" />
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Clinical Insights</h4>
+                        </div>
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                            {/* Findings Grid */}
+                            <div className="bento-cell h-full border-l-4 border-l-violet-500/20">
+                                <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-4">Observations</h4>
+                                <div className="space-y-2.5">
+                                    {result.findings?.map((f: string, i: number) => (
+                                        <div key={i} className="p-3 bg-white/50 dark:bg-white/5 rounded-xl border border-border/50 text-sm font-medium flex items-start gap-2.5 shadow-sm animate-in fade-in slide-in-from-left-2 duration-500 hover:scale-[1.01] transition-transform" style={{ animationDelay: `${i * 100}ms` }}>
+                                            <div className="mt-1.5 h-1.5 w-1.5 rounded-full bg-violet-500 shrink-0 shadow-[0_0_8px_rgba(139,92,246,0.5)]" />
+                                            <span className="leading-snug text-slate-700 dark:text-slate-200 text-xs tracking-wide">{f}</span>
+                                        </div>
+                                    ))}
+                                    {(!result.findings || result.findings.length === 0) && (
+                                        <p className="text-sm text-muted-foreground italic">No specific anomaly markers identified.</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Technical Metrics */}
+                            <div className="bento-cell h-full">
+                                <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-4">Technical Metrics</h4>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="p-3 bg-white/50 dark:bg-white/5 rounded-2xl border border-border/50">
+                                        <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider mb-1">Model Arch</p>
+                                        <p className="text-xs font-bold font-mono truncate">DenseNet-121</p>
+                                    </div>
+                                    <div className="p-3 bg-white/50 dark:bg-white/5 rounded-2xl border border-border/50">
+                                        <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider mb-1">Input Res</p>
+                                        <p className="text-xs font-bold font-mono">1024px</p>
+                                    </div>
+                                    <div className="p-3 bg-white/50 dark:bg-white/5 rounded-2xl border border-border/50 col-span-2">
+                                        <div className="flex justify-between items-center mb-1.5">
+                                            <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider">Entropy Score</p>
+                                            <p className="text-xs font-bold text-violet-500 flex items-center gap-1 font-mono">
+                                                <Activity className="h-3 w-3" />
+                                                {(Number(result.confidence_metrics?.uncertainty_level) || 0.12).toFixed(3)}
+                                            </p>
+                                        </div>
+                                        <div className="h-1.5 bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden">
+                                            <div className="h-full bg-violet-500 rounded-full animate-pulse" style={{ width: '15%' }} />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+
+                {/* 3. PATIENT HISTORY & REGISTRY */}
+                <div className="space-y-6 pt-4">
+                    {/* Trending Chart - Reduced Height */}
+                    {historyData.length > 0 && (
+                        <div className="hospital-card p-6 bg-white dark:bg-card/50">
+                            <h4 className="text-[11px] font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                <TrendingUp className="h-3.5 w-3.5 text-cyan-500" />
+                                Health Progression
+                            </h4>
+                            <div className="h-[180px] w-full">
+                                <PatientTrendChart data={historyData} />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Collapsible Registry */}
+                    <div className="rounded-3xl border border-border/40 bg-white/50 dark:bg-card/50 overflow-hidden backdrop-blur-sm">
+                        <button
+                            onClick={() => setRegistryOpen(!registryOpen)}
+                            className="w-full flex items-center justify-between p-4 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+                        >
+                            <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                                <Clock className="h-4 w-4" />
+                                Registry & Recent Scans
+                            </h3>
+                            <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform duration-300", registryOpen && "rotate-180")} />
+                        </button>
+
+                        <div className={cn(
+                            "grid transition-all duration-300 ease-in-out",
+                            registryOpen ? "grid-rows-[1fr] opacity-100 p-4 pt-0" : "grid-rows-[0fr] opacity-0"
+                        )}>
+                            <div className="overflow-hidden">
+                                <AnalysisHistory analyses={recentAnalyses as any} />
+                            </div>
                         </div>
                     </div>
                 </div>

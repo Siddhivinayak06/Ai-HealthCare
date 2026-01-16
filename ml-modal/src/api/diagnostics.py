@@ -118,7 +118,7 @@ async def predict_image(
             diagnosis["details"] = f"Analysis completed with {diagnosis['confidence']:.1%} confidence."
         
         if explain:
-            explanation = UnifiedExplainer.explain_image(model, input_tensor, image, image_id, DATA_DIR)
+            explanation = UnifiedExplainer.explain_image(model, input_tensor, image, image_id, DATA_DIR, diagnosis)
             if explanation:
                 diagnosis["explanation_url"] = explanation["url"]
                 diagnosis["explanation_text"] = explanation["summary"]

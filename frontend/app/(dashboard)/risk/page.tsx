@@ -435,8 +435,8 @@ export default function RiskPage() {
                                         <ul className="space-y-2">
                                             {Array.isArray(result.recommendation) && result.recommendation.map((rec: any, i: number) => {
                                                 // Safely handle non-string items (legacy or malformed data)
-                                                const text = typeof rec === 'string' ? rec : String(rec || "");
-                                                if (!text) return null;
+                                                const text = typeof rec === 'string' ? rec : rec?.text || String(rec || "");
+                                                if (!text || text === "[object Object]") return null;
 
                                                 return (
                                                     <li

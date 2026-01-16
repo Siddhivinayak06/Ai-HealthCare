@@ -21,12 +21,15 @@ class GradCAM:
     def _register_hooks(self):
         def forward_hook(module, input, output):
             self.activations = output
-
-        def backward_hook(module, grad_input, grad_output):
-            self.gradients = grad_output[0]
+            
+            def backward_hook(grad):
+                self.gradients = grad
+                
+            # Register hook on the tensor directly to avoid in-place errors with module hooks
+            if isinstance(output, torch.Tensor):
+                output.register_hook(backward_hook)
 
         self.handlers.append(self.target_layer.register_forward_hook(forward_hook))
-        self.handlers.append(self.target_layer.register_full_backward_hook(backward_hook))
 
     def remove_hooks(self):
         for handler in self.handlers:

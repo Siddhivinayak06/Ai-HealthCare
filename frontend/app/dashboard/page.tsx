@@ -9,6 +9,7 @@ import { AIAssistant } from "@/components/ai-assistant"
 import { ScanIcon, UsersIcon, BrainIcon, ActivityIcon } from "@/components/icons"
 import { getSession } from "@/lib/auth"
 import { getDashboardStats, getAnalyticsByMonth, getConditionBreakdown } from "@/app/actions/dashboard"
+import { getRecentAnalyses } from "@/app/actions/analyses"
 
 import { PatientDashboard } from "@/components/patient-dashboard"
 import { getPatients, getPatientHealthRecords } from "@/app/actions/patients"
@@ -23,12 +24,13 @@ export default async function DashboardPage() {
         const patients = await getPatients()
         const profile = patients?.[0]
 
-        const [records, predictions] = profile
+        const [records, predictions, recentScans] = profile
             ? await Promise.all([
                 getPatientHealthRecords(profile.id),
                 getPatientPredictions(3), // Limit to 3 for summary
+                getRecentAnalyses(5)
             ])
-            : [[], []]
+            : [[], [], []]
 
         return (
             <div className="min-h-screen relative overflow-hidden">
@@ -43,6 +45,7 @@ export default async function DashboardPage() {
                         initialProfile={profile as unknown as Patient}
                         initialRecords={records as unknown as HealthRecord[]}
                         initialPredictions={predictions as unknown as AIInsight[]}
+                        recentScans={recentScans}
                     />
                     <AIAssistant />
                 </div>

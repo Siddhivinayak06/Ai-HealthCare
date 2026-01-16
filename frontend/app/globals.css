@@ -311,28 +311,37 @@
   }
 
   /* Healthcare Semantic Cards */
-  .health-card {
-    @apply relative overflow-hidden rounded-2xl border border-border/10 bg-card/40 backdrop-blur-md transition-all duration-500;
+  .hospital-card {
+    @apply relative overflow-hidden rounded-3xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-zinc-900/60 backdrop-blur-xl transition-all duration-500 shadow-sm;
   }
 
-  .health-card::before {
+  .hospital-card::before {
     content: "";
     position: absolute;
     inset: 0;
     border-radius: inherit;
     padding: 1px;
-    background: linear-gradient(135deg, oklch(from var(--primary) l c h / 0.2) 0%, transparent 60%);
+    background: linear-gradient(135deg, oklch(from var(--primary) l c h / 0.1) 0%, transparent 60%);
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
     pointer-events: none;
   }
 
-  .health-card:hover {
-    @apply border-border/30 bg-card/60;
-    transform: translateY(-3px) scale(1.01);
-    box-shadow: 0 20px 50px -15px oklch(from var(--primary) l c h / 0.2);
+  .hospital-card:hover {
+    @apply border-slate-300/80 dark:border-white/20 shadow-md;
+    transform: translateY(-2px);
   }
+
+  .bento-cell {
+    @apply flex flex-col p-6 rounded-3xl border border-slate-200/50 dark:border-white/5 bg-white/50 dark:bg-white/5 backdrop-blur-md transition-all duration-300;
+  }
+
+  .bento-cell:hover {
+    @apply bg-white/80 dark:bg-white/10 shadow-sm;
+  }
+
+
 
   /* Metric Card Variants */
   .metric-card-heart {
@@ -416,6 +425,146 @@
       opacity: 0.7;
       transform: scale(1.1);
     }
+  }
+
+  @keyframes heartbeat {
+    0% {
+      transform: scale(1);
+    }
+
+    14% {
+      transform: scale(1.15);
+    }
+
+    28% {
+      transform: scale(1);
+    }
+
+    42% {
+      transform: scale(1.15);
+    }
+
+    70% {
+      transform: scale(1);
+    }
+
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  .animate-heartbeat {
+    animation: heartbeat 2.5s ease-in-out infinite;
+  }
+
+  @keyframes brain-pulse {
+
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+
+    50% {
+      transform: scale(1.03);
+      opacity: 0.85;
+    }
+  }
+
+  .animate-brain-pulse {
+    animation: brain-pulse 3s ease-in-out infinite;
+  }
+
+  @keyframes shimmer-slow {
+
+    0%,
+    100% {
+      opacity: 0.95;
+    }
+
+    50% {
+      opacity: 1;
+    }
+  }
+
+  .animate-shimmer-slow {
+    animation: shimmer-slow 2s ease-in-out infinite;
+  }
+
+  @keyframes drift-slow {
+    0% {
+      background-position: 0% 50%;
+    }
+
+    50% {
+      background-position: 100% 50%;
+    }
+
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  .animate-drift-slow {
+    background-size: 200% 200%;
+    animation: drift-slow 15s ease infinite;
+  }
+
+  /* Medical Ripple (High Fidelity) */
+  @keyframes medical-ripple {
+    0% {
+      transform: scale(0.8);
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7), 0 0 0 0 rgba(16, 185, 129, 0.7);
+      opacity: 1;
+    }
+
+    100% {
+      transform: scale(1.6);
+      box-shadow: 0 0 0 8px rgba(16, 185, 129, 0), 0 0 0 16px rgba(16, 185, 129, 0);
+      opacity: 0;
+    }
+  }
+
+  .animate-medical-ripple {
+    animation: medical-ripple 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  /* Breathing Glow (Organic) */
+  @keyframes breathing-glow {
+
+    0%,
+    100% {
+      filter: drop-shadow(0 0 4px rgba(139, 92, 246, 0.4));
+      transform: scale(1);
+    }
+
+    50% {
+      filter: drop-shadow(0 0 12px rgba(139, 92, 246, 0.9));
+      transform: scale(1.08);
+    }
+  }
+
+  .animate-breathing-glow {
+    animation: breathing-glow 4s ease-in-out infinite;
+  }
+
+  /* Dark Medical Ripple (Neon Glow) */
+  @keyframes dark-ripple {
+    0% {
+      transform: scale(0.8);
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.8), 0 0 0 0 rgba(5, 150, 105, 0.8);
+      opacity: 1;
+    }
+
+    100% {
+      transform: scale(3.5);
+      box-shadow: 0 0 20px 20px rgba(16, 185, 129, 0), 0 0 40px 40px rgba(5, 150, 105, 0);
+      opacity: 0;
+    }
+  }
+
+  .animate-dark-ripple {
+    animation: dark-ripple 3s cubic-bezier(0, 0, 0.2, 1) infinite;
   }
 
   @keyframes float {

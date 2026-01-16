@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTheme } from "next-themes"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,6 +27,7 @@ export function SettingsForm({ user, settings }: SettingsFormProps) {
   const [passwordSuccess, setPasswordSuccess] = useState(false)
   const [settingsSuccess, setSettingsSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { setTheme } = useTheme()
 
   const [profileData, setProfileData] = useState({
     name: user?.name || "",
@@ -304,7 +306,10 @@ export function SettingsForm({ user, settings }: SettingsFormProps) {
                 <Switch
                   id="darkMode"
                   checked={preferencesData.darkMode}
-                  onCheckedChange={(checked) => setPreferencesData((p) => ({ ...p, darkMode: checked }))}
+                  onCheckedChange={(checked) => {
+                    setPreferencesData((p) => ({ ...p, darkMode: checked }))
+                    setTheme(checked ? "dark" : "light")
+                  }}
                 />
               </div>
             </div>
@@ -387,7 +392,12 @@ export function SettingsForm({ user, settings }: SettingsFormProps) {
               {settingsSuccess && (
                 <span className="text-success text-sm flex items-center gap-1">
                   <CheckCircleIcon className="h-4 w-4" />
-                  Settings saved
+                  {{
+                    en: "Settings saved",
+                    es: "Configuración guardada",
+                    fr: "Paramètres enregistrés",
+                    de: "Einstellungen gespeichert"
+                  }[preferencesData.language] || "Settings saved"}
                 </span>
               )}
             </div>

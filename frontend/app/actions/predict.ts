@@ -3,7 +3,8 @@
 import { getSession } from "@/lib/auth"
 import { cookies } from "next/headers"
 import { db } from "@/lib/db"
-import { riskPredictions } from "@/lib/schema"
+import { riskPredictions, patients } from "@/lib/schema"
+import { eq } from "drizzle-orm"
 
 const API_URL = process.env.ML_SERVICE_URL || "http://127.0.0.1:8000"
 
@@ -41,19 +42,35 @@ export async function predictRisk(data: any, explain: boolean = false) {
         // Persistence: Save to DB
         try {
             const user = await requireUser()
-            await db.insert(riskPredictions).values({
-                userId: user.id,
-                patientId: data.patientId || "", // Assuming patientId is in data
-                condition: result.prediction || "Unknown",
-                riskScore: result.risk_score?.toString() || "0",
-                severity: result.severity || "Low",
-                contributingFactors: JSON.stringify(result.factors || {}),
-                recommendations: JSON.stringify(result.recommendations || []),
-                modelVersion: "3.0.0",
-            })
+
+            let targetPatientId = data.patientId;
+
+            // If no patientId provided, try to find the patient record for this user
+            if (!targetPatientId) {
+                const patientRecord = await db.select().from(patients).where(eq(patients.userId, user.id)).limit(1);
+                if (patientRecord.length > 0) {
+                    targetPatientId = patientRecord[0].id;
+                }
+            }
+
+            if (targetPatientId) {
+                await db.insert(riskPredictions).values({
+                    userId: user.id,
+                    patientId: targetPatientId,
+                    condition: result.prediction || "Cardiovascular Risk",
+                    riskScore: result.risk_score?.toString() || "0",
+                    severity: result.severity || "Low",
+                    contributingFactors: JSON.stringify(result.factors || {}),
+                    recommendations: JSON.stringify(result.recommendations || []),
+                    modelVersion: "3.0.0",
+                })
+            } else {
+                console.warn("Skipping risk prediction persistence: No patient ID found for user", user.id);
+            }
         } catch (dbError) {
             console.error("Failed to persist risk prediction:", dbError)
         }
+
 
         return { success: true, data: result }
     } catch (error) {
