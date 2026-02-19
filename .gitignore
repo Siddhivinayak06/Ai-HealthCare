@@ -73,12 +73,6 @@ coverage/
 tmp/
 temp/
 
-
 # Project Specific
 ml-modal/data/
-ml-modal/**/*.jpg
-ml-modal/**/*.jpeg
-ml-modal/**/*.png
-ml-modal/**/*.dcm
-ml-modal/**/*.nii
 
