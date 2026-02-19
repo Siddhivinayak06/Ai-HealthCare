@@ -1,7 +1,7 @@
 import { getSession } from "@/lib/auth"
 import { AnalysisClient } from "@/components/analysis-client"
 import { getRecentAnalyses, getAnalysisStats } from "@/app/actions/analyses"
-import { Scan, Brain, Sparkles, Activity, ShieldCheck, TrendingUp, Zap, Cpu, Server, Gauge } from "lucide-react"
+import { Scan, Brain, Sparkles, Activity, ShieldCheck, TrendingUp, Zap, Cpu, Server, Gauge, Target } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -18,125 +18,172 @@ export default async function AnalysisPage() {
 
     return (
         <div className="min-h-screen relative overflow-hidden">
-            {/* Enhanced Background effects - Theme Aware */}
-            <div className="absolute inset-0 bg-grid-pattern opacity-[0.02] dark:opacity-[0.03] pointer-events-none" />
-            <div className="absolute top-0 left-1/4 w-[700px] h-[700px] bg-gradient-to-br from-cyan-500/5 dark:from-cyan-500/10 via-violet-600/4 dark:via-violet-600/8 to-transparent rounded-full blur-[150px] pointer-events-none animate-float" />
-            <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-gradient-to-tr from-violet-600/5 dark:from-violet-600/10 via-fuchsia-600/3 dark:via-fuchsia-600/5 to-transparent rounded-full blur-[150px] pointer-events-none animate-float" style={{ animationDelay: '3s' }} />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/[0.02] dark:bg-primary/[0.03] rounded-full blur-[200px] pointer-events-none" />
+            {/* Enhanced Background effects - Theme Aware - with Noise Texture */}
+            <div className="absolute inset-0 bg-grid-pattern opacity-[0.02] dark:opacity-[0.04] pointer-events-none" />
+
+            {/* Noise Texture for Matte Finish */}
+            <div className="absolute inset-0 opacity-[0.015] dark:opacity-[0.03] pointer-events-none" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} />
+
+            <div className="absolute top-0 left-1/4 w-[800px] h-[800px] bg-gradient-to-br from-cyan-500/10 dark:from-cyan-500/15 via-violet-600/5 dark:via-violet-600/10 to-transparent rounded-full blur-[120px] pointer-events-none animate-float" />
+            <div className="absolute bottom-0 right-1/4 w-[800px] h-[800px] bg-gradient-to-tr from-violet-600/10 dark:from-violet-600/15 via-fuchsia-600/5 dark:via-fuchsia-600/10 to-transparent rounded-full blur-[120px] pointer-events-none animate-float" style={{ animationDelay: '3s' }} />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[1000px] bg-primary/[0.03] dark:bg-primary/[0.05] rounded-full blur-[150px] pointer-events-none" />
 
             <div className="relative p-4 lg:px-6 pt-16 lg:pt-6 space-y-6 w-full">
-                {/* Premium Header Section */}
-                <div className="relative overflow-hidden rounded-3xl p-6 sm:p-8 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between border border-white/20 shadow-2xl bg-white/40 dark:bg-black/20 backdrop-blur-xl transition-all hover:border-white/30">
-                    {/* Glass/Gradient Background */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-white/40 via-white/10 to-transparent dark:from-white/5 dark:via-white/2 dark:to-transparent pointer-events-none" />
-
-                    <div className="relative flex items-center gap-5">
-                        <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-cyan-500 via-violet-600 to-fuchsia-600 p-[1px] shadow-[0_0_20px_rgba(139,92,246,0.3)] group">
-                            <div className="h-full w-full rounded-2xl bg-white dark:bg-black/90 backdrop-blur-md flex items-center justify-center relative overflow-hidden">
-                                <Scan className="h-8 w-8 text-transparent bg-clip-text bg-gradient-to-br from-cyan-500 via-violet-600 to-fuchsia-600 group-hover:scale-110 transition-transform duration-500" />
-                                <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-fuchsia-600/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                {/* Header Section - Open & Technical */}
+                <div className="relative z-10 space-y-6 animate-in fade-in slide-in-from-bottom-5 duration-1000">
+                    <div className="flex flex-col lg:flex-row justify-between items-end gap-6 pb-6 border-b border-slate-200/50 dark:border-white/10">
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-violet-500 to-blue-500 flex items-center justify-center shadow-lg shadow-violet-500/20">
+                                    <Brain className="w-6 h-6 text-white" />
+                                </div>
+                                <div>
+                                    <h1 className="text-4xl font-black tracking-tight text-foreground">
+                                        AI Diagnostic Hub
+                                    </h1>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                        <p className="text-xs font-mono text-muted-foreground uppercase opacity-80">
+                                            Neural Imaging Analysis System <span className="text-slate-300 dark:text-slate-700">|</span> v3.0.1
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div className="space-y-1">
-                            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-slate-900 via-violet-700 to-slate-900 dark:from-white dark:via-violet-300 dark:to-white drop-shadow-sm">
-                                AI Diagnostic Hub
-                            </h1>
-                            <p className="text-[10px] uppercase tracking-[0.3em] font-mono font-bold text-muted-foreground flex items-center gap-2.5">
-                                <span className="relative flex h-2 w-2">
-                                    <span className="animate-medical-ripple absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span>
-                                </span>
-                                Neural Imaging Analysis System
-                            </p>
+
+                        <div className="flex items-center gap-3">
+                            <div className="px-4 py-1.5 rounded-full bg-white/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center gap-2 backdrop-blur-md">
+                                <Activity className="w-3.5 h-3.5 text-blue-500" />
+                                <span className="text-xs font-semibold text-foreground">DenseNet-121</span>
+                            </div>
+                            <div className="px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2">
+                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">HIPAA Secured</span>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Status Badges - Premium Glass Pills */}
-                    <div className="relative flex flex-wrap gap-3">
-                        <div className="px-4 py-2 rounded-xl flex items-center gap-2.5 bg-cyan-500/5 border border-cyan-500/20 backdrop-blur-md shadow-sm hover:bg-cyan-500/10 transition-colors">
-                            <Brain className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-                            <span className="text-xs font-bold tracking-wide text-cyan-700 dark:text-cyan-300">DenseNet-121</span>
+                    {/* Compact Stats Row - Technical Precision */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        {/* 1. Total Analyses */}
+                        <div className="glass-card-premium group p-5 flex flex-col justify-between h-32 hover:border-cyan-500/30">
+                            {/* Technical Corners */}
+                            <div className="absolute top-0 right-0 w-8 h-8 border-t border-r border-cyan-500/20 rounded-tr-2xl opacity-50 group-hover:opacity-100 transition-opacity" />
+                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b border-l border-cyan-500/20 rounded-bl-2xl opacity-50 group-hover:opacity-100 transition-opacity" />
+
+                            <div className="flex justify-between items-start z-10">
+                                <div className="p-2 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 shadow-lg shadow-cyan-500/20 text-white group-hover:scale-110 transition-transform duration-300">
+                                    <Activity className="w-5 h-5" />
+                                </div>
+                                <div className="flex items-center gap-1 text-[10px] font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20">
+                                    +12%
+                                </div>
+                            </div>
+
+                            <div className="z-10 mt-2">
+                                <p className="text-3xl font-mono font-bold tracking-tight text-foreground group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors duration-300">{totalScans}</p>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 mt-1">Total Scans</p>
+                            </div>
+
+                            {/* Progress Line */}
+                            <div className="absolute bottom-0 inset-x-0 h-1 bg-slate-100 dark:bg-white/5">
+                                <div className="h-full w-[45%] bg-cyan-500/50" />
+                            </div>
                         </div>
-                        <div className="px-4 py-2 rounded-xl flex items-center gap-2.5 bg-emerald-500/5 border border-emerald-500/20 backdrop-blur-md shadow-sm hover:bg-emerald-500/10 transition-colors">
-                            <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                            <span className="text-xs font-bold tracking-wide text-emerald-700 dark:text-emerald-300">HIPAA Compliant</span>
+
+                        {/* 2. Critical Cases */}
+                        <div className="glass-card-premium group p-5 flex flex-col justify-between h-32 hover:border-rose-500/30">
+                            {/* Technical Corners */}
+                            <div className="absolute top-0 right-0 w-8 h-8 border-t border-r border-rose-500/20 rounded-tr-2xl opacity-50 group-hover:opacity-100 transition-opacity" />
+                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b border-l border-rose-500/20 rounded-bl-2xl opacity-50 group-hover:opacity-100 transition-opacity" />
+
+                            {/* Pulse for critical */}
+                            {criticalCases > 0 && <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-rose-500 animate-ping" />}
+
+                            <div className="flex justify-between items-start z-10">
+                                <div className="p-2 rounded-xl bg-gradient-to-br from-rose-400 to-pink-600 shadow-lg shadow-rose-500/20 text-white group-hover:scale-110 transition-transform duration-300">
+                                    <ShieldCheck className="w-5 h-5" />
+                                </div>
+                                <div className="flex items-center gap-1 text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
+                                    Action Req.
+                                </div>
+                            </div>
+
+                            <div className="z-10 mt-2">
+                                <p className="text-3xl font-mono font-bold tracking-tight text-foreground group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors duration-300">{criticalCases}</p>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 mt-1">Critical Cases</p>
+                            </div>
+
+                            {/* Progress Line */}
+                            <div className="absolute bottom-0 inset-x-0 h-1 bg-slate-100 dark:bg-white/5">
+                                <div className="h-full w-[80%] bg-rose-500/50" />
+                            </div>
+                        </div>
+
+                        {/* 3. Normal Results */}
+                        <div className="glass-card-premium group p-5 flex flex-col justify-between h-32 hover:border-emerald-500/30">
+                            {/* Technical Corners */}
+                            <div className="absolute top-0 right-0 w-8 h-8 border-t border-r border-emerald-500/20 rounded-tr-2xl opacity-50 group-hover:opacity-100 transition-opacity" />
+                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b border-l border-emerald-500/20 rounded-bl-2xl opacity-50 group-hover:opacity-100 transition-opacity" />
+
+                            <div className="flex justify-between items-start z-10">
+                                <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 shadow-lg shadow-emerald-500/20 text-white group-hover:scale-110 transition-transform duration-300">
+                                    <Sparkles className="w-5 h-5" />
+                                </div>
+                                <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                    Healthy
+                                </div>
+                            </div>
+
+                            <div className="z-10 mt-2">
+                                <p className="text-3xl font-mono font-bold tracking-tight text-foreground group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors duration-300">{normalCases}</p>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 mt-1">Normal Results</p>
+                            </div>
+
+                            {/* Progress Line */}
+                            <div className="absolute bottom-0 inset-x-0 h-1 bg-slate-100 dark:bg-white/5">
+                                <div className="h-full w-[25%] bg-emerald-500/50" />
+                            </div>
+                        </div>
+
+                        {/* 4. Model Accuracy */}
+                        <div className="glass-card-premium group p-5 flex flex-col justify-between h-32 hover:border-violet-500/30">
+                            {/* Technical Corners */}
+                            <div className="absolute top-0 right-0 w-8 h-8 border-t border-r border-violet-500/20 rounded-tr-2xl opacity-50 group-hover:opacity-100 transition-opacity" />
+                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b border-l border-violet-500/20 rounded-bl-2xl opacity-50 group-hover:opacity-100 transition-opacity" />
+
+                            <div className="flex justify-between items-start z-10">
+                                <div className="p-2 rounded-xl bg-gradient-to-br from-violet-400 to-indigo-600 shadow-lg shadow-violet-500/20 text-white group-hover:scale-110 transition-transform duration-300">
+                                    <Gauge className="w-5 h-5" />
+                                </div>
+                                <div className="flex items-center gap-1 text-[10px] font-bold text-violet-600 dark:text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20">
+                                    v2.4.0
+                                </div>
+                            </div>
+
+                            <div className="z-10 mt-2">
+                                <div className="flex items-baseline gap-1">
+                                    <p className="text-3xl font-mono font-bold tracking-tight text-foreground group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors duration-300">94.8</p>
+                                    <span className="text-sm font-bold text-muted-foreground">%</span>
+                                </div>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 mt-1">Accuracy</p>
+                            </div>
+
+                            {/* Progress Line */}
+                            <div className="absolute bottom-0 inset-x-0 h-1 bg-slate-100 dark:bg-white/5">
+                                <div className="h-full w-[94%] bg-violet-500/50" />
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                {/* Compact Stats Row - Premium Glass Design */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    {[
-                        {
-                            label: "Total Analyses",
-                            value: totalScans,
-                            icon: Activity,
-                            color: "text-cyan-600 dark:text-cyan-400",
-                            bgGradient: "bg-gradient-to-br from-cyan-500/5 to-transparent dark:from-cyan-500/10",
-                            hover: "hover:shadow-[0_0_20px_rgba(6,182,212,0.15)] hover:border-cyan-500/30",
-                            border: "border-cyan-200/50 dark:border-cyan-500/20",
-                            iconBg: "bg-cyan-100 dark:bg-cyan-500/20"
-                        },
-                        {
-                            label: "Critical Cases",
-                            value: criticalCases,
-                            icon: ShieldCheck,
-                            color: "text-rose-600 dark:text-rose-400",
-                            bgGradient: "bg-gradient-to-br from-rose-500/5 to-transparent dark:from-rose-500/10",
-                            hover: "hover:shadow-[0_0_20px_rgba(225,29,72,0.15)] hover:border-rose-500/30",
-                            border: "border-rose-200/50 dark:border-rose-500/20",
-                            iconBg: "bg-rose-100 dark:bg-rose-500/20"
-                        },
-                        {
-                            label: "Normal Results",
-                            value: normalCases,
-                            icon: Sparkles,
-                            color: "text-emerald-600 dark:text-emerald-400",
-                            bgGradient: "bg-gradient-to-br from-emerald-500/5 to-transparent dark:from-emerald-500/10",
-                            hover: "hover:shadow-[0_0_20px_rgba(16,185,129,0.15)] hover:border-emerald-500/30",
-                            border: "border-emerald-200/50 dark:border-emerald-500/20",
-                            iconBg: "bg-emerald-100 dark:bg-emerald-500/20"
-                        },
-                        {
-                            label: "Model Accuracy",
-                            value: "94.8%",
-                            icon: TrendingUp,
-                            color: "text-violet-600 dark:text-violet-400",
-                            bgGradient: "bg-gradient-to-br from-violet-500/5 to-transparent dark:from-violet-500/10",
-                            hover: "hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] hover:border-violet-500/30",
-                            border: "border-violet-200/50 dark:border-violet-500/20",
-                            iconBg: "bg-violet-100 dark:bg-violet-500/20"
-                        },
-                    ].map((stat, i) => (
-                        <div
-                            key={i}
-                            className={cn(
-                                "group relative overflow-hidden p-4 rounded-2xl flex items-center gap-4 transition-all duration-300 border backdrop-blur-sm",
-                                stat.bgGradient,
-                                stat.border,
-                                stat.hover
-                            )}
-                        >
-                            <div className={cn("p-3 rounded-xl transition-transform duration-300 group-hover:scale-110", stat.iconBg, stat.color)}>
-                                <stat.icon className="h-5 w-5" />
-                            </div>
-                            <div className="space-y-0.5">
-                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold opacity-80">{stat.label}</p>
-                                <p className="text-2xl font-black tracking-tight">{stat.value}</p>
-                            </div>
-                            {/* Decorative shiny corner */}
-                            <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-white/10 to-transparent -translate-y-8 translate-x-8 rounded-full blur-xl group-hover:bg-white/20 transition-all" />
-                        </div>
-                    ))}
-                </div>
-
-                {/* Main Content Area - Full Width */}
-                <div className="space-y-8">
-                    {/* Primary Analysis - Centered/Full */}
-                    <AnalysisClient
-                        userRole={user?.role || "patient"}
-                        recentAnalyses={recentAnalyses}
-                    />
+                    {/* Main Content Area - Full Width */}
+                    <div className="space-y-8">
+                        {/* Primary Analysis - Centered/Full */}
+                        <AnalysisClient
+                            userRole={user?.role || "patient"}
+                            recentAnalyses={recentAnalyses}
+                        />
+                    </div>
                 </div>
             </div>
         </div>

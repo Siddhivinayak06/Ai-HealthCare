@@ -160,7 +160,7 @@ export function ImageDiagnostics() {
                     AI Image Diagnostics
                     <Badge variant="outline" className="ml-auto border-cyan-500/30 bg-cyan-500/10 text-cyan-300 text-xs font-medium">
                         <Sparkles className="h-3 w-3 mr-1" />
-                        DenseNet
+                        AI Engine
                     </Badge>
                 </CardTitle>
                 <CardDescription className="text-slate-400">

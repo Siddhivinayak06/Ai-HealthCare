@@ -1,30 +1,26 @@
 "use server"
 
-import type { Report } from "@/lib/db"
+import { db } from "@/lib/db"
+import { reports } from "@/lib/schema"
+import { eq, desc, and } from "drizzle-orm"
 import { getSession } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { logActivity } from "./activity"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
-
-// Helper to get raw token for Authorization header
-import { cookies } from "next/headers"
-async function getSessionToken() {
-  const cookieStore = await cookies()
-  return cookieStore.get("auth_token")?.value || ""
-}
+import type { Report } from "@/lib/db"
 
 export async function getReports(): Promise<Report[]> {
   try {
-    const res = await fetch(`${API_URL}/reports`, {
-      headers: {
-        Authorization: `Bearer ${await getSessionToken()}`,
-      },
-      cache: "no-store"
-    })
+    const { user } = await getSession()
+    if (!user) return []
 
-    if (!res.ok) return []
-    return await res.json()
+    const result = await db
+      .select()
+      .from(reports)
+      .where(eq(reports.userId, user.id))
+      .orderBy(desc(reports.createdAt))
+
+    return result as Report[]
   } catch (error) {
     console.error("Error getting reports:", error)
     return []
@@ -38,52 +34,46 @@ export async function createReport(data: {
   content: object
 }): Promise<{ success: boolean; error?: string; report?: Report }> {
   try {
-    const res = await fetch(`${API_URL}/reports`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${await getSessionToken()}`,
-      },
-      body: JSON.stringify(data),
-    })
+    const { user } = await getSession()
+    if (!user) return { success: false, error: "Unauthorized" }
 
-    const result = await res.json()
-    if (!res.ok) {
-      return { success: false, error: result.message || "Failed to create report" }
-    }
+    const [newReport] = await db.insert(reports).values({
+      userId: user.id,
+      patientId: data.patientId || null,
+      title: data.title,
+      reportType: data.reportType,
+      content: data.content,
+      status: "ready",
+    }).returning()
 
     await logActivity("Report generated", "report", {
-      reportId: result.id,
+      reportId: newReport.id,
       reportType: data.reportType,
       title: data.title,
     })
 
     revalidatePath("/reports")
-    return { success: true, report: result }
+    return { success: true, report: newReport as Report }
   } catch (error) {
     console.error("Error creating report:", error)
-    return { success: false, error: "Network error" }
+    return { success: false, error: "Failed to create report" }
   }
 }
 
 export async function deleteReport(id: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const res = await fetch(`${API_URL}/reports/${id}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${await getSessionToken()}`,
-      },
-    })
+    const { user } = await getSession()
+    if (!user) return { success: false, error: "Unauthorized" }
 
-    if (!res.ok) {
-      return { success: false, error: "Failed to delete report" }
-    }
+    await db.delete(reports).where(
+      and(eq(reports.id, id), eq(reports.userId, user.id))
+    )
 
     await logActivity("Report deleted", "report", { reportId: id })
     revalidatePath("/reports")
     return { success: true }
   } catch (error) {
     console.error("Error deleting report:", error)
-    return { success: false, error: "Network error" }
+    return { success: false, error: "Failed to delete report" }
   }
 }

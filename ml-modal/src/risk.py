@@ -1,4 +1,5 @@
-from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
+from sklearn.model_selection import cross_val_score
 import pandas as pd
 import numpy as np
 import joblib
@@ -65,13 +66,29 @@ def train_improved_risk_model(data_df=None):
 
     X_processed = preprocess_risk_features(X)
     
-    model = RandomForestClassifier(
-        n_estimators=100, 
-        max_depth=10, 
+    model = XGBClassifier(
+        n_estimators=200,
+        max_depth=6,
+        learning_rate=0.1,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        reg_alpha=0.1,
+        reg_lambda=1.0,
+        use_label_encoder=False,
+        eval_metric='logloss',
         random_state=42
     )
+
+    # 5-fold cross-validation before final fit
+    cv_f1 = cross_val_score(model, X_processed, y, cv=5, scoring='f1')
+    cv_auc = cross_val_score(model, X_processed, y, cv=5, scoring='roc_auc')
+    print(f"📊 Cross-Validation Results (5-fold):")
+    print(f"   F1    : {cv_f1.mean():.4f} ± {cv_f1.std():.4f}")
+    print(f"   AUC   : {cv_auc.mean():.4f} ± {cv_auc.std():.4f}")
+
     model.fit(X_processed, y)
     joblib.dump(model, RISK_MODEL_PATH)
+    print(f"💾 Model saved to {RISK_MODEL_PATH}")
     return model
 
 def predict_patient_risk(model, data):

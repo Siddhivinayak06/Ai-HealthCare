@@ -5,7 +5,7 @@ import type { UserSettings } from "@/lib/db"
 import { revalidatePath } from "next/cache"
 import { logActivity } from "./activity"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
+
 
 import { db } from "@/lib/db"
 import { userSettings } from "@/lib/schema"

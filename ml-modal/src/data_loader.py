@@ -5,17 +5,21 @@ import shutil
 import random
 
 def get_transforms(modality="xray"):
-    # Common medical imaging augmentation
+    # Strong medical imaging augmentation for better generalization
     train_transforms = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
+        transforms.RandomResizedCrop(224, scale=(0.75, 1.0)),   # Random crops instead of fixed center crop
         transforms.RandomHorizontalFlip(),
-        transforms.RandomRotation(15),
-        transforms.ColorJitter(brightness=0.2, contrast=0.2),
+        transforms.RandomVerticalFlip(p=0.3),                   # Valid for CT/MRI orientations
+        transforms.RandomRotation(20),
+        transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
+        transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.1),
+        transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 1.0)),  # Simulate noise/blur
         transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        transforms.RandomErasing(p=0.2, scale=(0.02, 0.15)),    # Simulate occlusion
     ])
 
+    # Val transforms stay deterministic (no randomness)
     val_transforms = transforms.Compose([
         transforms.Resize(256),
         transforms.CenterCrop(224),

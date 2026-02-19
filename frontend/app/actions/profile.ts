@@ -5,14 +5,7 @@ import { users } from "@/lib/schema"
 import { eq } from "drizzle-orm"
 import { getSession } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
-import { cookies } from "next/headers"
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api"
-
-async function getSessionToken() {
-    const cookieStore = await cookies()
-    return cookieStore.get("auth_token")?.value
-}
+import bcrypt from "bcryptjs"
 
 export async function getUserProfile() {
     try {
@@ -33,7 +26,6 @@ export async function getUserProfile() {
 
         if (result.length === 0) return null
 
-        // Return structured data
         return {
             id: result[0].id,
             email: result[0].email,
@@ -49,27 +41,21 @@ export async function getUserProfile() {
 }
 
 export async function updateUserProfile(data: { name: string; email: string }) {
-    const token = await getSessionToken()
-    if (!token) return { error: "Not authenticated" }
-
     try {
-        const res = await fetch(`${API_URL}/auth/profile`, {
-            method: "PUT",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(data),
-        })
+        const { user } = await getSession()
+        if (!user) return { error: "Not authenticated" }
 
-        const responseData = await res.json()
-
-        if (!res.ok) {
-            return { error: responseData.message || "Failed to update profile" }
-        }
+        await db.update(users)
+            .set({
+                name: data.name,
+                email: data.email,
+                updatedAt: new Date(),
+            })
+            .where(eq(users.id, user.id))
 
         revalidatePath("/profile")
-        return { success: true, user: responseData }
+        revalidatePath("/settings")
+        return { success: true, user: { name: data.name, email: data.email } }
     } catch (error) {
         console.error("Update profile error:", error)
         return { error: "Failed to update profile" }
@@ -77,26 +63,30 @@ export async function updateUserProfile(data: { name: string; email: string }) {
 }
 
 export async function changePassword(data: { currentPassword: string; newPassword: string }) {
-    const token = await getSessionToken()
-    if (!token) return { error: "Not authenticated" }
-
     try {
-        const res = await fetch(`${API_URL}/auth/password`, {
-            method: "PUT",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(data),
-        })
+        const { user } = await getSession()
+        if (!user) return { error: "Not authenticated" }
 
-        const responseData = await res.json()
+        // 1. Fetch current user with password hash
+        const currentUser = await db.select().from(users).where(eq(users.id, user.id)).limit(1)
+        if (currentUser.length === 0) return { error: "User not found" }
 
-        if (!res.ok) {
-            return { error: responseData.message || "Failed to update password" }
-        }
+        // 2. Verify current password
+        const isValid = await bcrypt.compare(data.currentPassword, currentUser[0].passwordHash)
+        if (!isValid) return { error: "Incorrect current password" }
 
-        return { success: true, message: responseData.message }
+        // 3. Hash new password and update
+        const salt = await bcrypt.genSalt(10)
+        const hashedPassword = await bcrypt.hash(data.newPassword, salt)
+
+        await db.update(users)
+            .set({
+                passwordHash: hashedPassword,
+                updatedAt: new Date(),
+            })
+            .where(eq(users.id, user.id))
+
+        return { success: true, message: "Password updated successfully" }
     } catch (error) {
         console.error("Change password error:", error)
         return { error: "Failed to change password" }
