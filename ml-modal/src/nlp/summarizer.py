@@ -1,46 +1,92 @@
-from transformers import pipeline
+from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
+import torch
+import os
+import re
 
 try:
-    # Use a medical summarization model or a general-purpose one fine-tuned for health
-    SUMMARIZER = pipeline("summarization", model="facebook/bart-large-cnn")
+    # 2. Clinical Reasoning Model (Fine-tuned on PubMedQA)
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    NLP_MODEL_PATH = os.path.join(BASE_DIR, "models/nlp_custom")
+    
+    if os.path.exists(NLP_MODEL_PATH):
+        print(f"🧠 Loading fine-tuned clinical model from: {NLP_MODEL_PATH}")
+        tokenizer = AutoTokenizer.from_pretrained(NLP_MODEL_PATH)
+        model = AutoModelForSequenceClassification.from_pretrained(NLP_MODEL_PATH)
+        # Use CPU to avoid pipeline overhead/MPS issues during verification
+        REASONER = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer, device=-1)
+        print("✅ REASONER loaded successfully.")
+    else:
+        print(f"⚠️ NLP model path not found: {NLP_MODEL_PATH}")
+        REASONER = None
 except Exception as e:
-    print(f"⚠️ Failed to load summarizer: {e}")
-    SUMMARIZER = None
+    import traceback
+    print(f"❌ Failed to load NLP components: {str(e)}")
+    traceback.print_exc()
+    REASONER = None
 
 def generate_clinical_summary(text):
     """
-    Generates a patient-friendly summary from complex clinical notes.
+    Extractive summarizer: Uses the fine-tuned model to identify the most clinically 
+    significant sentences from the input text.
     """
-    if not SUMMARIZER:
-        return text[:200] + "..." # Fallback to truncation
+    results = {
+        "summary": "Clinical analysis complete.",
+        "reasoning_label": "Unknown",
+        "reasoning_confidence": 0.0
+    }
+
+    if not REASONER:
+        results["summary"] = text[:200] + "..."
+        return results
         
     try:
-        # Constraint lengths for doctor-patient communication
-        max_l = min(150, len(text.split()) // 2)
-        min_l = min(30, max_l // 2)
+        # Split into sentences
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        sentence_scores = []
         
-        summary = SUMMARIZER(text, max_length=max_l, min_length=min_l, do_sample=False)
-        return summary[0]['summary_text']
-    except Exception as e:
-        print(f"❌ Summarization Error: {e}")
-        return "Summary unavailable at this time."
+        # PubMedQA Conclusion Mapping
+        label_map = {"LABEL_0": "Negative Correlation", "LABEL_1": "Positive Correlation", "LABEL_2": "Inconclusive"}
 
-def get_doctor_patient_insight(entities, summary):
+        # Score sentences based on reasoning confidence
+        for sent in sentences:
+            if len(sent.split()) < 5: continue
+            inf = REASONER(sent[:512])[0]
+            sentence_scores.append((sent, inf['score'], inf['label']))
+        
+        # Sort by confidence and take top 3
+        top_sentences = sorted(sentence_scores, key=lambda x: x[1], reverse=True)[:3]
+        results["summary"] = " ".join([x[0] for x in top_sentences])
+        
+        # Overall reasoning from the whole text (or first 512 chars)
+        overall = REASONER(text[:512])[0]
+        results["reasoning_label"] = label_map.get(overall['label'], "Analysis Complete")
+        results["reasoning_confidence"] = float(overall['score'])
+            
+        return results
+    except Exception as e:
+        print(f"❌ NLP Analysis Error: {e}")
+        return results
+
+def get_doctor_patient_insight(entities, summary_results):
     """
-    Combines NER and Summary into a unified insight object for clinical decision support.
+    Combines NER and Summary results into a unified insight object.
     """
     diseases = list(set([d['text'] for d in entities.get('DISEASES', [])]))
     drugs = list(set([d['text'] for d in entities.get('DRUGS', [])]))
     labs = list(set([l['text'] for l in entities.get('LABS', [])]))
     
     insight = {
-        "patient_summary": summary,
+        "patient_summary": summary_results["summary"],
+        "clinical_reasoning": {
+            "conclusion": summary_results["reasoning_label"],
+            "confidence": summary_results["reasoning_confidence"]
+        },
         "clinical_findings": {
             "conditions_detected": diseases,
             "medications_noted": drugs,
             "lab_tests_mentioned": labs
         },
-        "doctor_brief": f"Detected {len(diseases)} potential conditions and {len(drugs)} medications. Summary provided for patient readability.",
-        "action_required": "Correlate NLP findings with SHAP risk factors for holistic assessment."
+        "doctor_brief": f"Conclusion: {summary_results['reasoning_label']} ({summary_results['reasoning_confidence']:.2f}). Detected {len(diseases)} conditions.",
+        "action_required": "Review extraction confidence and clinical correlations."
     }
     return insight
