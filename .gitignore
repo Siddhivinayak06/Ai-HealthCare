@@ -53,26 +53,24 @@ wheels/
 venv/
 .venv/
 
-# ML Models (Large files)
+
+# Deep Learning Models
 *.pth
 *.joblib
 *.h5
 *.onnx
+*.pkl
+*.model
 
-# IDEs
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# Coverage
-coverage/
-.nyc_output/
-
-# Temporary
-tmp/
-temp/
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
 # Project Specific
-ml-modal/data/
+ml-modal/data/uploads/
 
