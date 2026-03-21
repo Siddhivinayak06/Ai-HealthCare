@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from PIL import Image
 import torch
 import io
@@ -8,10 +8,17 @@ import time
 from typing import Optional
 from src.config import SCAN_CONDITIONS, MODEL_FILES, DATA_DIR, DEVICE
 from src.services.model_manager import get_model_lazy
-from src.image_processing import analyze_image_features, get_diagnosis_from_prediction, image_preprocess
+from src.image_processing import (
+    analyze_image_features,
+    get_diagnosis_from_prediction,
+    image_preprocess,
+    preprocess_medical_image,
+    tta_predict,
+)
 from src.explainability.explanation import UnifiedExplainer
+from src.api.auth import verify_token
 
-router = APIRouter(prefix="/predict", tags=["diagnostics"])
+router = APIRouter(prefix="/predict", tags=["diagnostics"], dependencies=[Depends(verify_token)])
 
 @router.post("/image")
 async def predict_image(
@@ -26,18 +33,23 @@ async def predict_image(
     
     try:
         contents = await file.read()
-        image = Image.open(io.BytesIO(contents)).convert("RGB")
+        raw_image = Image.open(io.BytesIO(contents)).convert("RGB")
         
         image_id = str(uuid.uuid4())
         upload_dir = os.path.join(DATA_DIR, "uploads", scan_type)
         os.makedirs(upload_dir, exist_ok=True)
         image_path = os.path.join(upload_dir, f"{image_id}.png")
-        image.save(image_path)
+        raw_image.save(image_path)
         
-        image_features = analyze_image_features(image)
+        # ── Step 1: Medical-grade preprocessing (CLAHE) ──
+        enhanced_image = preprocess_medical_image(raw_image)
         
+        # ── Step 2: Extract rich image features ──
+        image_features = analyze_image_features(enhanced_image)
+        
+        # ── Step 3: Auto-detect modality ──
         modality_model = get_model_lazy("modality_check")
-        input_tensor = image_preprocess(image).unsqueeze(0).to(DEVICE)
+        input_tensor = image_preprocess(enhanced_image).unsqueeze(0).to(DEVICE)
         
         detected_scan_type = scan_type
         auto_corrected = False
@@ -75,35 +87,46 @@ async def predict_image(
                      (os.path.exists(MODEL_FILES.get(final_scan_type, "")) or 
                       (final_scan_type=="xray" and os.path.exists(GENERIC_MODEL_FILENAME))))
 
-        with torch.no_grad():
-            output = model(input_tensor)
-            probs = torch.nn.functional.softmax(output[0], dim=0)
-            
-        from src.confidence.services import get_prediction_with_confidence
+        # ── Step 4: Test-Time Augmentation (TTA) for robust prediction ──
+        tta_result = tta_predict(model, enhanced_image, DEVICE)
+        probs = tta_result["mean_probs"]
         
+        # ── Step 5: MC-Dropout confidence estimation ──
+        from src.confidence.services import get_prediction_with_confidence
         conf_result = get_prediction_with_confidence(model, input_tensor)
         confidence_metrics = conf_result["confidence_metrics"]
         
         processing_time = time.time() - start_time
         
+        # ── Step 6: Generate diagnosis ──
         diagnosis = get_diagnosis_from_prediction(
             probs, image_features, final_scan_type, processing_time, is_trained
         )
         
+        # Enrich with TTA & confidence metadata
         diagnosis["confidence_metrics"] = confidence_metrics
         diagnosis["modality_debug"] = modality_debug
+        diagnosis["processing_metadata"] = {
+            "tta_agreement": round(tta_result["tta_agreement"], 4),
+            "tta_augmentations": tta_result["num_augmentations"],
+            "tta_std": [round(float(s), 4) for s in tta_result["std_probs"]],
+            "clahe_enhanced": True,
+            "processing_time_ms": round(processing_time * 1000, 1),
+        }
+        
         if auto_corrected:
             diagnosis["findings"].insert(0, f"⚠️ Note: Auto-detected as {SCAN_CONDITIONS[final_scan_type]['name']} instead of {SCAN_CONDITIONS[scan_type]['name']}")
             diagnosis["scan_type"] = SCAN_CONDITIONS[final_scan_type]['name']
             diagnosis["auto_corrected"] = True
         
-        recs = []
-        if diagnosis['severity'] in ['High', 'Critical']:
-            recs.append("Urgent specialist consultation required")
-        elif diagnosis['severity'] == 'Medium':
-            recs.append("Follow-up imaging recommended")
-        else:
-            recs.append("No specific medical intervention required")
+        recs = diagnosis.get("recommendations", [])
+        if not recs:
+            if diagnosis['severity'] in ['High', 'Critical']:
+                recs.append("Urgent specialist consultation required")
+            elif diagnosis['severity'] == 'Medium':
+                recs.append("Follow-up imaging recommended")
+            else:
+                recs.append("No specific medical intervention required")
             
         diagnosis["recommendations"] = recs
         diagnosis["id"] = image_id
@@ -118,7 +141,7 @@ async def predict_image(
             diagnosis["details"] = f"Analysis completed with {diagnosis['confidence']:.1%} confidence."
         
         if explain:
-            explanation = UnifiedExplainer.explain_image(model, input_tensor, image, image_id, DATA_DIR, diagnosis)
+            explanation = UnifiedExplainer.explain_image(model, input_tensor, enhanced_image, image_id, DATA_DIR, diagnosis)
             if explanation:
                 diagnosis["explanation_url"] = explanation["url"]
                 diagnosis["explanation_text"] = explanation["summary"]
@@ -171,22 +194,26 @@ async def predict_batch(
         
         for img_path in image_files:
             try:
-                # DICOM handling or standard image
                 image = Image.open(img_path).convert("RGB")
-                input_tensor = image_preprocess(image).unsqueeze(0).to(DEVICE)
+                enhanced = preprocess_medical_image(image)
+                
+                # Extract features for each batch image
+                batch_features = analyze_image_features(enhanced)
+                
+                input_tensor = image_preprocess(enhanced).unsqueeze(0).to(DEVICE)
                 
                 with torch.no_grad():
                     output = model(input_tensor)
                     probs = torch.nn.functional.softmax(output[0], dim=0)
                     
-                from src.image_processing import get_diagnosis_from_prediction
-                # Use fake processing time for batch slices
-                diag = get_diagnosis_from_prediction(probs, {}, scan_type, 0.1, True)
+                diag = get_diagnosis_from_prediction(probs, batch_features, scan_type, 0.1, True)
                 diag["image_name"] = os.path.basename(img_path)
                 
-                # Simple criticality score: Probability of non-normal class
-                # Assuming index 0 is normal for simplicity, needs refinement based on classes
-                risk_score = 1.0 - float(probs[0].item())
+                # Risk score: Probability of non-normal class
+                if scan_type == "mri":
+                    risk_score = float(probs[0].item())  # idx 0 is abnormal for MRI
+                else:
+                    risk_score = float(probs[1].item())  # idx 1 is abnormal for others
                 diag["risk_score"] = risk_score
                 
                 results.append(diag)
@@ -197,9 +224,8 @@ async def predict_batch(
             raise HTTPException(status_code=500, detail="Failed to process any images in batch")
             
         # Find the most "Critical" result
-        # Sort by: Critical > High > Medium > Low > Normal
         severity_map = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1, "Normal": 0}
-        results.sort(key=lambda x: (severity_map.get(x["severity"], 0), x["risk_score"]), reverse=True)
+        results.sort(key=lambda x: (severity_map.get(x["severity"], 0), x.get("risk_score", 0)), reverse=True)
         
         most_critical = results[0]
         most_critical["batch_count"] = len(results)

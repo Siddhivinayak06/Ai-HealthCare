@@ -41,36 +41,36 @@ export function ActivityList({ initialActivities }: ActivityListProps) {
     activities.length > 0
       ? activities
       : [
-          { id: "1", action: "Image Analysis Completed", action_type: "analysis", created_at: new Date() },
+          { id: "1", action: "Image Analysis Completed", actionType: "analysis", createdAt: new Date() },
           {
             id: "2",
             action: "New Patient Data Submitted",
-            action_type: "data",
-            created_at: new Date(Date.now() - 8 * 60 * 1000),
+            actionType: "data",
+            createdAt: new Date(Date.now() - 8 * 60 * 1000),
           },
           {
             id: "3",
             action: "Risk Prediction Generated",
-            action_type: "prediction",
-            created_at: new Date(Date.now() - 15 * 60 * 1000),
+            actionType: "prediction",
+            createdAt: new Date(Date.now() - 15 * 60 * 1000),
           },
           {
             id: "4",
             action: "Report Downloaded",
-            action_type: "report",
-            created_at: new Date(Date.now() - 22 * 60 * 1000),
+            actionType: "report",
+            createdAt: new Date(Date.now() - 22 * 60 * 1000),
           },
           {
             id: "5",
             action: "CT Scan Uploaded",
-            action_type: "upload",
-            created_at: new Date(Date.now() - 35 * 60 * 1000),
+            actionType: "upload",
+            createdAt: new Date(Date.now() - 35 * 60 * 1000),
           },
           {
             id: "6",
             action: "Model Accuracy Updated",
-            action_type: "system",
-            created_at: new Date(Date.now() - 60 * 60 * 1000),
+            actionType: "system",
+            createdAt: new Date(Date.now() - 60 * 60 * 1000),
           },
         ]
 
@@ -103,20 +103,20 @@ export function ActivityList({ initialActivities }: ActivityListProps) {
               >
                 <div>
                   <p className="font-medium text-card-foreground">{activity.action}</p>
-                  <p className="text-sm text-muted-foreground mt-1">{formatTime(activity.created_at)}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{activity.createdAt ? formatTime(activity.createdAt) : "Unknown"}</p>
                 </div>
                 <Badge
                   variant="secondary"
                   className={cn(
-                    activity.action_type === "analysis" && "bg-primary/10 text-primary",
-                    activity.action_type === "prediction" && "bg-success/10 text-success",
-                    activity.action_type === "data" && "bg-warning/10 text-warning",
-                    activity.action_type === "report" && "bg-chart-5/10 text-chart-5",
-                    activity.action_type === "upload" && "bg-accent text-accent-foreground",
-                    activity.action_type === "system" && "bg-muted text-muted-foreground",
+                    activity.actionType === "analysis" && "bg-primary/10 text-primary",
+                    activity.actionType === "prediction" && "bg-success/10 text-success",
+                    activity.actionType === "data" && "bg-warning/10 text-warning",
+                    activity.actionType === "report" && "bg-chart-5/10 text-chart-5",
+                    activity.actionType === "upload" && "bg-accent text-accent-foreground",
+                    activity.actionType === "system" && "bg-muted text-muted-foreground",
                   )}
                 >
-                  {activity.action_type}
+                  {activity.actionType}
                 </Badge>
               </div>
             ))}

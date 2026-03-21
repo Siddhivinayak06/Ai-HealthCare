@@ -70,9 +70,34 @@ export async function createAppointment(data: {
     if (!user) throw new Error("Unauthorized");
 
     try {
+        let finalPatientId = data.patientId;
+        let finalUserId = data.userId;
+
+        if (user.role === "patient") {
+            // Patient booking: verify or lookup their patient row
+            const patientRecord = await db.query.patients.findFirst({
+                where: eq(patients.userId, user.id)
+            });
+            if (!patientRecord) {
+                return { success: false, error: "Patient profile not found. Please complete your profile first." };
+            }
+            finalPatientId = patientRecord.id;
+            // The doctor ID comes from data.userId as chosen by the patient
+            finalUserId = data.userId;
+        } else if (user.role === "doctor") {
+            // Doctor booking: Force the doctor ID to the current user
+            finalUserId = user.id;
+            // They can choose the patient, so finalPatientId = data.patientId
+            finalPatientId = data.patientId;
+            
+            if (!finalPatientId) {
+                return { success: false, error: "Patient ID is required." };
+            }
+        }
+
         const result = await db.insert(appointments).values({
-            userId: data.userId,
-            patientId: data.patientId,
+            userId: finalUserId,
+            patientId: finalPatientId,
             title: data.title,
             startTime: new Date(data.startTime),
             endTime: new Date(data.endTime),
@@ -94,6 +119,28 @@ export async function updateAppointmentStatus(id: string, status: string) {
     if (!user) throw new Error("Unauthorized");
 
     try {
+        // Fetch the appointment to verify ownership (Security/IDOR Check)
+        const appointmentObj = await db.query.appointments.findFirst({
+            where: eq(appointments.id, id)
+        });
+
+        if (!appointmentObj) {
+            return { success: false, error: "Appointment not found" };
+        }
+
+        if (user.role === "patient") {
+            const patientRecord = await db.query.patients.findFirst({
+                where: eq(patients.userId, user.id)
+            });
+            if (!patientRecord || appointmentObj.patientId !== patientRecord.id) {
+                throw new Error("Forbidden: You do not have permission to update this appointment.");
+            }
+        } else if (user.role === "doctor") {
+            if (appointmentObj.userId !== user.id) {
+                throw new Error("Forbidden: You do not have permission to update this appointment.");
+            }
+        }
+
         await db.update(appointments)
             .set({
                 status: status as any,
@@ -105,7 +152,7 @@ export async function updateAppointmentStatus(id: string, status: string) {
         return { success: true };
     } catch (error) {
         console.error("Error updating appointment:", error);
-        return { success: false, error: "Failed to update status" };
+        return { success: false, error: error instanceof Error ? error.message : "Failed to update status" };
     }
 }
 

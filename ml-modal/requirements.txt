@@ -16,3 +16,5 @@ pymupdf
 spacy
 datasets
 tf-keras
+PyJWT
+python-dotenv

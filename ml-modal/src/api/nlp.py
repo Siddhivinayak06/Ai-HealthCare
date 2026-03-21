@@ -1,11 +1,12 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 import time
 from src.schemas.models import NLPRequest, NLPResponse, NLPEntity
 from src.nlp.report_parser import parse_clinical_report
 from src.nlp.medical_ner import extract_medical_entities
 from src.nlp.summarizer import get_doctor_patient_insight
+from src.api.auth import verify_token
 
-router = APIRouter(prefix="/nlp", tags=["nlp"])
+router = APIRouter(prefix="/nlp", tags=["nlp"], dependencies=[Depends(verify_token)])
 
 @router.post("/analyze", response_model=NLPResponse)
 def analyze_report_endpoint(data: NLPRequest):

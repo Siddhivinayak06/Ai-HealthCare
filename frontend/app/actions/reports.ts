@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { reports } from "@/lib/schema"
+import { reports, patients } from "@/lib/schema"
 import { eq, desc, and } from "drizzle-orm"
 import { getSession } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
@@ -37,9 +37,20 @@ export async function createReport(data: {
     const { user } = await getSession()
     if (!user) return { success: false, error: "Unauthorized" }
 
+    let finalPatientId = data.patientId || null;
+    
+    // Enforce ownership / resolve patient
+    if (user.role === "patient") {
+        const patientRecord = await db.query.patients.findFirst({
+            where: eq(patients.userId, user.id)
+        });
+        if (!patientRecord) return { success: false, error: "Patient record not found" };
+        finalPatientId = patientRecord.id;
+    }
+
     const [newReport] = await db.insert(reports).values({
       userId: user.id,
-      patientId: data.patientId || null,
+      patientId: finalPatientId,
       title: data.title,
       reportType: data.reportType,
       content: data.content,

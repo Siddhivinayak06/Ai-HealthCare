@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 import os
 import shutil
 import argparse
@@ -8,8 +8,9 @@ from src.core.state import MODELS, training_lock
 from src.model_factory import load_model_from_disk
 from src.services.model_manager import load_all_models
 import train
+from src.api.auth import verify_token
 
-router = APIRouter(tags=["training"])
+router = APIRouter(tags=["training"], dependencies=[Depends(verify_token)])
 
 @router.post("/feedback")
 def submit_feedback(feedback: FeedbackRequest):

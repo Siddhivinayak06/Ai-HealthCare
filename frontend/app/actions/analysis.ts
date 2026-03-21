@@ -1,7 +1,8 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { scans, diagnoses, riskPredictions, auditLogs } from "@/lib/schema";
+import { scans, diagnoses, riskPredictions, auditLogs, patients } from "@/lib/schema";
+import { eq } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { triageCase } from "@/services/triage";
 import { logActivity } from "./activity";
@@ -23,10 +24,21 @@ export async function saveImageAnalysis(data: {
     if (!user) throw new Error("Not authorized");
 
     try {
+        let finalPatientId = data.patientId || "";
+        
+        // Enforce ownership / resolve patient
+        if (user.role === "patient") {
+            const patientRecord = await db.query.patients.findFirst({
+                where: eq(patients.userId, user.id)
+            });
+            if (!patientRecord) throw new Error("Patient record not found");
+            finalPatientId = patientRecord.id;
+        }
+
         // 1. Create Scan record
         const scanResult = await db.insert(scans).values({
             uploadedBy: user.id,
-            patientId: data.patientId || "",
+            patientId: finalPatientId,
             scanType: data.scanType,
             imageUrl: data.imageUrl || "",
         }).returning();
@@ -92,9 +104,20 @@ export async function saveRiskPrediction(data: {
     if (!user) throw new Error("Not authorized");
 
     try {
+        let finalPatientId = data.patientId;
+        
+        // Enforce ownership / resolve patient
+        if (user.role === "patient") {
+            const patientRecord = await db.query.patients.findFirst({
+                where: eq(patients.userId, user.id)
+            });
+            if (!patientRecord) throw new Error("Patient record not found");
+            finalPatientId = patientRecord.id;
+        }
+
         const result = await db.insert(riskPredictions).values({
             userId: user.id,
-            patientId: data.patientId,
+            patientId: finalPatientId,
             healthRecordId: data.healthRecordId || null,
             condition: data.condition,
             riskScore: data.riskScore.toString(),

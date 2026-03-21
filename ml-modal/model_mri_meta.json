@@ -1,0 +1,18 @@
+{
+  "model_name": "densenet",
+  "num_classes": 2,
+  "class_names": [
+    "Brain_Tumor",
+    "Normal"
+  ],
+  "training_config": {
+    "model_name": "densenet",
+    "epochs": 3,
+    "batch_size": 16,
+    "lr": 0.001,
+    "finetune": true,
+    "label_smoothing": 0.1,
+    "mixup": true,
+    "best_val_f1": 0.7669
+  }
+}

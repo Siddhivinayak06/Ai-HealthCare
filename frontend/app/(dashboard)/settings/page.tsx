@@ -47,7 +47,7 @@ export default async function SettingsPage() {
             </div>
             <div>
               <p className="font-semibold">Notifications</p>
-              <p className="text-sm text-muted-foreground">{settings?.notifications_enabled ? 'Enabled' : 'Disabled'}</p>
+              <p className="text-sm text-muted-foreground">{settings?.notificationsEnabled ? 'Enabled' : 'Disabled'}</p>
             </div>
           </div>
           <div className="bento-card p-5 flex items-center gap-4">

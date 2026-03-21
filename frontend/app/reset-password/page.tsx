@@ -37,7 +37,8 @@ function ResetPasswordForm() {
         setSuccess(false)
 
         const formData = new FormData(e.currentTarget)
-        const result = await updatePassword(token, formData)
+        formData.append("token", token)
+        const result = await updatePassword(formData)
 
         setIsSubmitting(false)
         if (result.success) {

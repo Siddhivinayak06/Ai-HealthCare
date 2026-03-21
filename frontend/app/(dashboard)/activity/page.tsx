@@ -11,8 +11,8 @@ export default async function ActivityPage() {
   // Calculate stats
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const todayActivities = activities.filter(a => new Date(a.created_at) >= today)
-  const successActivities = activities.filter(a => a.action_type === 'success' || !a.action_type?.includes('error'))
+  const todayActivities = activities.filter(a => a.createdAt && new Date(a.createdAt) >= today)
+  const successActivities = activities.filter(a => a.actionType === 'success' || !a.actionType?.includes('error'))
 
   return (
     <div className="min-h-screen relative overflow-hidden">

@@ -1,4 +1,4 @@
-from xgboost import XGBClassifier
+from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import cross_val_score
 import pandas as pd
 import numpy as np
@@ -65,17 +65,11 @@ def train_improved_risk_model(data_df=None):
         y = data_df['risk_label']
 
     X_processed = preprocess_risk_features(X)
-    
-    model = XGBClassifier(
+    model = GradientBoostingClassifier(
         n_estimators=200,
         max_depth=6,
         learning_rate=0.1,
         subsample=0.8,
-        colsample_bytree=0.8,
-        reg_alpha=0.1,
-        reg_lambda=1.0,
-        use_label_encoder=False,
-        eval_metric='logloss',
         random_state=42
     )
 

@@ -78,7 +78,7 @@ def train_nlp_intelligence():
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         data_collator=DataCollatorWithPadding(tokenizer=tokenizer),
     )
 

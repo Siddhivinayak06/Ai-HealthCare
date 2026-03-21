@@ -23,7 +23,7 @@ export default async function ProfilePage() {
             <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-success/5 via-success/2 to-transparent rounded-full blur-3xl pointer-events-none" />
 
             <div className="relative p-4 lg:p-8 max-w-5xl mx-auto space-y-8">
-                <ProfileHeader user={user} />
+                <ProfileHeader user={{ ...user, role: user.role || 'user' }} />
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                     <div className="lg:col-span-7">

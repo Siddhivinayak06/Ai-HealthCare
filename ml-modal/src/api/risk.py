@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 import pandas as pd
 from src.schemas.models import RiskInput
 from src.risk import get_risk_model, predict_patient_risk
 from src.explainability.explanation import UnifiedExplainer
+from src.api.auth import verify_token
 
-router = APIRouter(prefix="/predict", tags=["risk"])
+router = APIRouter(prefix="/predict", tags=["risk"], dependencies=[Depends(verify_token)])
 risk_model = get_risk_model()
 
 @router.post("/risk")

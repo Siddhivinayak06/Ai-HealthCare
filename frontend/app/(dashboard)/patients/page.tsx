@@ -39,7 +39,7 @@ export default function PatientsPage() {
 
     if (aiResult.success && aiResult.predictions) {
       // Map AI predictions to our format
-      const formattedPredictions = aiResult.predictions.predictions.map((p, idx) => ({
+      const formattedPredictions = aiResult.predictions.predictions.map((p: any, idx: number) => ({
         ...p,
         icon:
           idx === 0

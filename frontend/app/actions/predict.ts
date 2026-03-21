@@ -45,8 +45,22 @@ export async function predictRisk(data: any, explain: boolean = false) {
 
             let targetPatientId = data.patientId;
 
-            // If no patientId provided, try to find the patient record for this user
-            if (!targetPatientId) {
+            // Enforce ownership / resolve patient
+            if (user.role === "patient") {
+                const patientRecord = await db.query.patients.findFirst({
+                    where: eq(patients.userId, user.id)
+                });
+                if (!patientRecord) {
+                    console.warn("Skipping risk prediction persistence: No patient profile found for patient user", user.id);
+                    targetPatientId = null;
+                } else if (targetPatientId && targetPatientId !== patientRecord.id) {
+                    console.warn("IDOR attempt: Patient", user.id, "tried to predict risk for patientId", targetPatientId);
+                    targetPatientId = patientRecord.id; // Force to their own ID
+                } else {
+                    targetPatientId = patientRecord.id;
+                }
+            } else if (!targetPatientId) {
+                // For doctors, targetPatientId should be provided. If not, fallback.
                 const patientRecord = await db.select().from(patients).where(eq(patients.userId, user.id)).limit(1);
                 if (patientRecord.length > 0) {
                     targetPatientId = patientRecord[0].id;

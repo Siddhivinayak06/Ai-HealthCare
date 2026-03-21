@@ -81,7 +81,7 @@ export function BookingModal({ open, onOpenChange, user }: BookingModalProps) {
 
             const result = await createAppointment({
                 userId: isDoctor ? user.id : formData.participantId,
-                patientId: isDoctor ? formData.participantId : (patientsList[0]?.id || ""), // Need a better way to get patient ID if user is patient
+                patientId: isDoctor ? formData.participantId : "", // Server automatically resolves this for patients
                 title: formData.title || "Routine Checkup",
                 startTime: startDate.toISOString(),
                 endTime: endDate.toISOString(),

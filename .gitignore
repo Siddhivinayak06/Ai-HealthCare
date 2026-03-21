@@ -75,9 +75,18 @@ ehthumbs.db
 Thumbs.db
 
 # Project Specific
-ml-modal/data/uploads/
-ml-modal/data/real_data/
+ml-modal/data/
 ml-modal/models/
 ml-modal/results/
 ml-modal/logs/
+.vscode/
+.pyre_configuration
+ml-modal/.vscode/
+ml-modal/.pyre_configuration
+frontend/.vscode/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
 
