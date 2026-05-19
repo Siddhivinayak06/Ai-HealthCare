@@ -105,23 +105,61 @@ cd Ai-HealthCare
 ### 2. Frontend Setup
 ```bash
 cd frontend
+
 # Create and configure your environment variables
-cp .env.local.example .env.local  
+cp .env.example .env.local
+# Edit .env.local with your actual values:
+# - DATABASE_URL: Your Neon Postgres connection string
+# - JWT_SECRET: Generate with: openssl rand -hex 32
+# - CLOUDINARY_* variables for image hosting
+# - SMTP_* variables for email (optional)
+
 npm install
 npm run dev
 ```
+The app will be available at **http://localhost:3000**
 
 ### 3. ML Backend Setup (`ml-modal`)
+
+#### Option A: Local Python (Development)
 Open a new terminal session:
 ```bash
 cd ml-modal
+
+# Create environment configuration
+cp .env.example .env
+# Edit .env with your settings (optional for local development)
+
+# Create virtual environment
 python -m venv venv
 source venv/bin/activate      # On Windows use: venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Run the server
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
+The API will be available at **http://localhost:8000**
 
-> **Optional**: Use the helper script `start_services.sh` from the root directory to spin up all services concurrently (make sure the directories align with the script).
+#### Option B: Docker (Production)
+```bash
+cd ml-modal
+
+# Build the Docker image
+docker build -t medai-backend:latest .
+
+# Run the container
+docker run -p 8000:8000 \
+  -e JWT_SECRET="your-secret-key" \
+  -v /path/to/weights:/app/weights \
+  medai-backend:latest
+```
+
+> **Convenience**: Use the helper script `start_services.sh` from the root directory to spin up all services concurrently:
+> ```bash
+> ./start_services.sh
+> ```
 
 ---
 
@@ -129,26 +167,88 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 Due to GitHub file size limits, the trained model weights (`*.pth` files, typically ~100MB+ each) are **NOT included** in this repository. 
 
-To solve this, we host our pre-trained model weights via **GitHub Releases**. 
+We host pre-trained model weights via **GitHub Releases** for easy distribution.
 
-### Quick Download
-To easily download the latest model weights, run the included fetching script:
+### Download Pre-Trained Models
+
+**Latest Release**: [v1.0-models](https://github.com/Siddhivinayak06/Ai-HealthCare/releases/tag/v1.0-models)
+
+To automatically download the latest model weights:
 ```bash
 cd ml-modal
 python download_weights.py
 ```
-*Note: This script will query the GitHub API for the latest release and automatically download any attached `.pth` files into the `ml-modal/weights/` folder.*
 
-### Manual Training
-If you prefer to train your own diagnostic models from scratch using your dataset:
+This script:
+- Queries the GitHub API for the latest release
+- Downloads all `.pth` and `.joblib` files
+- Saves them to `ml-modal/weights/` for automatic loading
+- Skips files that already exist
+
+**Available Models**:
+- `model_xray.pth` - X-Ray chest radiography analysis (29 MB)
+- `model_ct.pth` - CT scan cross-sectional imaging (29 MB)
+- `model_mri.pth` - MRI brain imaging analysis (29 MB)
+- `model_modality_check.pth` - Medical image modality classifier (94 MB)
+- `risk_model.joblib` - Patient risk prediction model (1.8 MB)
+
+### Train Custom Models
+
+To train your own diagnostic models from scratch:
 ```bash
 cd ml-modal
+
+# Prepare your training data in the data/ directory
+python prepare_modality_data.py
+
+# Train models for specific modalities
+python train_xray.py    # X-Ray model
+python train_ct.py      # CT model
+python train_mri.py     # MRI model
+python train_risk.py    # Risk model
+
+# Or train all models at once
 python train.py
 ```
 
 ---
 
-## 📈 Human-in-the-Loop Learning
+## � Security & Authentication
+
+### JWT Authentication (Frontend ↔ ML Backend)
+The frontend and ML backend communicate via **JWT tokens** for secure inference:
+
+1. **Frontend** (`next/server`): Mints short-lived JWTs with user context (ID, role)
+   ```typescript
+   const mlToken = await encrypt({ sub: user.id, role: user.role });
+   ```
+
+2. **ML Backend** (FastAPI): Verifies token signature using the shared `JWT_SECRET`
+   ```python
+   payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+   ```
+
+**Important**: Ensure the `JWT_SECRET` environment variable matches on both frontend and backend for token verification to work.
+
+### Environment Configuration
+
+Both services use `.env` files for configuration. Example files are provided:
+
+**Frontend** (`frontend/.env.example`):
+- `DATABASE_URL`: Neon Postgres connection
+- `JWT_SECRET`: Token signing key
+- `NEXT_PUBLIC_CLOUDINARY_*`: Image hosting
+- `ML_SERVICE_URL`: ML backend URL
+
+**ML Backend** (`ml-modal/.env.example`):
+- `JWT_SECRET`: Token verification key (must match frontend)
+- `ML_HOST`, `ML_PORT`: Server configuration
+- `DEVICE`: GPU/CPU selection
+- `MODELS_DIR`: Path to model weights
+
+---
+
+## �📈 Human-in-the-Loop Learning
 
 Our diagnostic pipeline follows a strict, medically guided validation cycle:
 1. **Predict**: AI provides the initial clinical impression and scores.
