@@ -235,7 +235,10 @@ export function AnalysisClient({ userRole, recentAnalyses = [] }: AnalysisClient
 
             if (!response.ok) {
                 const errorData = await response.json()
-                throw new Error(errorData.error || 'Analysis failed')
+                const errMsg = typeof errorData.error === 'string'
+                    ? errorData.error
+                    : errorData.error?.message || errorData.message || 'Analysis failed'
+                throw new Error(errMsg)
             }
 
             const data = await response.json()

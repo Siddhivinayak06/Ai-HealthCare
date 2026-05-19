@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth"; // removed getSession as unused
+import { requireAuth, encrypt } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { scans, diagnoses } from "@/lib/schema";
 
@@ -108,10 +108,17 @@ export async function POST(req: NextRequest) {
 
         try {
             const endpoint = isBatch ? "batch" : "image";
+
+            // Mint a short-lived JWT for the ML backend using the shared secret
+            const mlToken = await encrypt({ sub: user.id, role: user.role });
+
             const response = await fetch(`${ML_SERVICE_URL}/predict/${endpoint}`, {
                 method: "POST",
                 body: mlFormData,
                 signal: controller.signal,
+                headers: {
+                    Authorization: `Bearer ${mlToken}`,
+                },
             });
             clearTimeout(timeout);
 

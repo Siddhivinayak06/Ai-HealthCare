@@ -129,8 +129,22 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 Due to GitHub file size limits, the trained model weights (`*.pth` files, typically ~100MB+ each) are **NOT included** in this repository. 
 
-* **Option A**: Train your own models using the provided `ml-modal/train.py`.
-* **Option B**: Download pre-trained weights from our external storage bucket and place them in the appropriate `ml-modal` weights directory.
+To solve this, we host our pre-trained model weights via **GitHub Releases**. 
+
+### Quick Download
+To easily download the latest model weights, run the included fetching script:
+```bash
+cd ml-modal
+python download_weights.py
+```
+*Note: This script will query the GitHub API for the latest release and automatically download any attached `.pth` files into the `ml-modal/weights/` folder.*
+
+### Manual Training
+If you prefer to train your own diagnostic models from scratch using your dataset:
+```bash
+cd ml-modal
+python train.py
+```
 
 ---
 
